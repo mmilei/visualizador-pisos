@@ -370,8 +370,8 @@ void main(){
   vec2 tuv=vec2(across+r1*uWoodM*7.,along+r3*uWoodM*11.)/uWoodM;
   if(r2>.5)tuv.x=-tuv.x;
   vec2 gx=vec2(dFdx(f.x),dFdx(f.y))/uWoodM,gy=vec2(dFdy(f.x),dFdy(f.y))/uWoodM;
-  // contraste de veta a 0,6: los pisos reales de referencia (roble natural, satinado) tienen veta fina y suave
-  col*=pow(lin(textureGrad(uWood,tuv,gx,gy).rgb)/max(uWoodMean,vec3(1e-3)),vec3(.6));
+  // contraste de veta a 0,78: los pisos reales de referencia (roble natural, satinado) tienen veta fina y suave
+  col*=pow(lin(textureGrad(uWood,tuv,gx,gy).rgb)/max(uWoodMean,vec3(1e-3)),vec3(.78));
   float jw=.0011,de=min(dA,dL);
   float cov=clamp((jw+.5*fwl-de)/fwl,0.,1.)*min(1.,2.*jw/fwl);
   col*=mix(1.,.28,cov);
@@ -410,11 +410,11 @@ void main(){
           vec2 q=Wp.xy/Wp.z*uFS+uC;
           float inb=step(0.,q.x)*step(0.,q.y)*step(q.x,uSize.x)*step(q.y,uSize.y);
           float ct=an/length(r),F=.04+.96*pow(1.-ct,5.);
-          float lod=uRough*clamp(1.5+log2(1.+h*12.),0.,8.);
+          float lod=uRough*clamp(.8+log2(1.+h*10.),0.,7.);
           vec3 rc=lin(textureLod(uPhoto,q/uSize,lod).rgb);
           // la foto clava las ventanas en blanco: HDR aproximado para que su reflejo se note como en una foto real
-          rc*=1.+3.*smoothstep(.7,1.,dot(rc,vec3(.2126,.7152,.0722)));
-          col=mix(col,rc,clamp(uRefl*F*1.6,0.,.9)*inb*(1.-.7*cov));
+          rc*=1.+5.*smoothstep(.7,1.,dot(rc,vec3(.2126,.7152,.0722)));
+          col=mix(col,rc,clamp(uRefl*F*2.6+uRefl*.08,0.,.92)*inb*(1.-.7*cov));
         }
       }
     }
@@ -892,7 +892,7 @@ function render(opts={}){
   const t=hex2hsl(CAT[st.tone][1]);gl.uniform3f(U.uTone,t[0],t[1],t[2]);
   const G=st.ok&&st.geo&&st.geo.cam,rv=+$("refl").value/100;
   gl.uniform1f(U.uFS,G?G.S*G.f:1);gl.uniform2f(U.uC,G?G.cx:0,G?G.cy:0);gl.uniform3fv(U.uN,G?G.n:[0,1,0]);
-  gl.uniform1f(U.uRefl,G?rv:0);gl.uniform1f(U.uRough,.6+2.6*(1-rv));
+  gl.uniform1f(U.uRefl,G?rv:0);gl.uniform1f(U.uRough,.45+1.9*(1-rv));
   gl.uniform3fv(U.uWoodMean,woodMean);gl.uniform1f(U.uWoodM,WOOD_M);
   $("rv").textContent=rv<.03?"apagado":rv<.35?"mate":rv<.7?"satinado":"laqueado";
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
