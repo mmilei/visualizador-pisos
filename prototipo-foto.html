@@ -309,7 +309,7 @@ uniform float uGloss,uMean,uAOk;
 uniform vec2 uSize;uniform mat3 uHinv;
 uniform float uW,uLightK,uSplit,uPat,uDir,uShow,uShowMask;
 uniform vec3 uTone;
-uniform sampler2D uWood;uniform vec3 uWoodMean;uniform float uWoodM,uRefl,uRough,uFS;uniform vec2 uC;uniform vec3 uN;
+uniform sampler2D uWood;uniform vec3 uWoodMean;uniform vec2 uTexM;uniform float uOwn,uRefl,uRough,uFS;uniform vec2 uC;uniform vec3 uN;
 float h11(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(h11(i),h11(i+vec2(1,0)),f.x),mix(h11(i+vec2(0,1)),h11(i+vec2(1,1)),f.x),f.y);}
@@ -365,13 +365,15 @@ void main(){
   // variación entre tablas chica (±2% de luminosidad, ±1,5° de matiz): en los pisos reales casi no se distinguen
   vec3 hsl=vec3(uTone.x+(r2-.5)*3.,uTone.y*.92,clamp(uTone.z+(r1-.5)*.04,0.,1.));
   vec3 col=lin(hsl2rgb(hsl));
-  // veta real: foto de chapa de roble (texturas/roble.jpg, un tile = uWoodM metros, veta a lo largo del eje v),
+  // veta real: textura del producto si la hay (uOwn=1: se usa tal cual, con la variación entre tablas encima);
+  // si no, la chapa de roble genérica teñida al tono. Un tile cubre uTexM metros (ancho, largo), veta a lo largo de v.
   // con un recorte distinto por tabla y espejada en la mitad; se recolorea al tono del producto (col × textura/media)
-  vec2 tuv=vec2(across+r1*uWoodM*7.,along+r3*uWoodM*11.)/uWoodM;
+  vec2 tuv=vec2(across+r1*uTexM.x*7.,along+r3*uTexM.y*11.)/uTexM;
   if(r2>.5)tuv.x=-tuv.x;
-  vec2 gx=vec2(dFdx(f.x),dFdx(f.y))/uWoodM,gy=vec2(dFdy(f.x),dFdy(f.y))/uWoodM;
+  vec2 gx=vec2(dFdx(f.x),dFdx(f.y))/uTexM,gy=vec2(dFdy(f.x),dFdy(f.y))/uTexM;
   // contraste de veta a 0,78: los pisos reales de referencia (roble natural, satinado) tienen veta fina y suave
-  col*=pow(lin(textureGrad(uWood,tuv,gx,gy).rgb)/max(uWoodMean,vec3(1e-3)),vec3(.78));
+  vec3 tw=lin(textureGrad(uWood,tuv,gx,gy).rgb);
+  col=mix(col*pow(tw/max(uWoodMean,vec3(1e-3)),vec3(.78)),tw*col/max(lin(hsl2rgb(uTone)),vec3(1e-3)),uOwn);
   float jw=.0011,de=min(dA,dL);
   float cov=clamp((jw+.5*fwl-de)/fwl,0.,1.)*min(1.,2.*jw/fwl);
   col*=mix(1.,.28,cov);
@@ -430,7 +432,12 @@ void main(){
   o=vec4(res,1.);
 }`;
 let prog,U={},texPhoto,texLight,texMask,texAO,texWood,woodMean=[.218,.218,.218];
-const WOOD_M=1.83; // metros que cubre un tile de texturas/roble.jpg
+// Texturas de veta. Genérica: chapa de roble CC0, un tile = 1,83 m. Propias: muestras del catálogo ampliadas con
+// Real-ESRGAN (texturas/CREDITOS.md), un tile = 22 × 44 cm. Se eligen por la muestra del tono.
+const TEX_GEN={src:"texturas/roble.jpg",m:[1.83,1.83],own:0};
+const TEX_OWN={"muestras/roble-eslavonia.jpg":"texturas/roble-eslavonia.jpg","muestras/lapacho.jpg":"texturas/lapacho.jpg",
+  "muestras/nevado-oak.jpg":"texturas/nevado-oak.jpg"};
+let texCur=TEX_GEN,texWant=null;
 function initGL(){
   if(!gl){$("empty").innerHTML="Este navegador no tiene WebGL2. Probá con Safari 15+, Chrome o Edge.";return false;}
   const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);
@@ -439,7 +446,7 @@ function initGL(){
   gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
   ["uPhoto","uLight","uMask","uAO","uGloss","uMean","uAOk","uSize","uHinv","uW","uLightK","uSplit","uPat","uDir","uShow","uShowMask","uTone",
-   "uWood","uWoodMean","uWoodM","uRefl","uRough","uFS","uC","uN"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+   "uWood","uWoodMean","uTexM","uOwn","uRefl","uRough","uFS","uC","uN"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
   const loc=gl.getAttribLocation(prog,"aPos");gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
@@ -456,20 +463,25 @@ function initGL(){
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
   gl.uniform1i(U.uWood,4);gl.activeTexture(gl.TEXTURE0);
-  const wim=new Image();
+  loadWood(TEX_GEN);
+  return true;
+}
+function loadWood(t){
+  texWant=t;const wim=new Image();
   wim.onload=()=>{
+    if(texWant!==t)return; // llegó tarde: ya se eligió otro producto
     gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,texWood);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,wim);gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.MIRRORED_REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.MIRRORED_REPEAT);
     const an=gl.getExtension("EXT_texture_filter_anisotropic");
     if(an)gl.texParameterf(gl.TEXTURE_2D,an.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
     gl.activeTexture(gl.TEXTURE0);
     const c=document.createElement("canvas");c.width=c.height=64;const g=c.getContext("2d");g.drawImage(wim,0,0,64,64);
     const d=g.getImageData(0,0,64,64).data,mm=[0,0,0];
     for(let i=0;i<64*64;i++)for(let k=0;k<3;k++)mm[k]+=Math.pow(d[i*4+k]/255,2.2)/(64*64);
-    woodMean=mm;req();};
-  wim.src="texturas/roble.jpg";
-  return true;
+    woodMean=mm;texCur=t;req();};
+  wim.src=t.src;
 }
 const glOK=(()=>{try{return initGL()}catch(e){console.error(e);$("empty").textContent="Error de WebGL: "+e.message;return false}})();
 
@@ -893,7 +905,7 @@ function render(opts={}){
   const G=st.ok&&st.geo&&st.geo.cam,rv=+$("refl").value/100;
   gl.uniform1f(U.uFS,G?G.S*G.f:1);gl.uniform2f(U.uC,G?G.cx:0,G?G.cy:0);gl.uniform3fv(U.uN,G?G.n:[0,1,0]);
   gl.uniform1f(U.uRefl,G?rv:0);gl.uniform1f(U.uRough,.45+1.9*(1-rv));
-  gl.uniform3fv(U.uWoodMean,woodMean);gl.uniform1f(U.uWoodM,WOOD_M);
+  gl.uniform3fv(U.uWoodMean,woodMean);gl.uniform2fv(U.uTexM,texCur.m);gl.uniform1f(U.uOwn,texCur.own);
   $("rv").textContent=rv<.03?"apagado":rv<.35?"mate":rv<.7?"satinado":"laqueado";
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 }
@@ -938,7 +950,8 @@ chips("areaSrc",()=>[["visible","Piso visible"],["hull","Con lo tapado"]],()=>st
 /* productos y tonos del catálogo */
 function fillTones(){const g={};CAT.forEach((t,i)=>{(g[t[3]]=g[t[3]]||[]).push(`<option value="${i}">${t[0]}</option>`);});
   $("tone").innerHTML=Object.keys(g).map(k=>`<optgroup label="Catálogo, página ${k}">${g[k].join("")}</optgroup>`).join("");$("tone").value=String(st.tone);}
-function setTone(i){st.tone=i;const t=CAT[i];$("tone").value=String(i);$("toneImg").src="catalogo/"+t[2];$("toneInfo").textContent=`${t[1]} · aproximado`;req();}
+function setTone(i){st.tone=i;const t=CAT[i];
+  if(glOK){const o=TEX_OWN[t[2]],w=o?{src:o,m:[.22,.44],own:1}:TEX_GEN;if(!texWant||w.src!==texWant.src)loadWood(w);}$("tone").value=String(i);$("toneImg").src="catalogo/"+t[2];$("toneInfo").textContent=`${t[1]} · aproximado`;req();}
 function setProd(i){st.prod=i;const p=PRODUCTS[i];$("prod").value=String(i);$("w").value=p[1];st.pattern=p[2];
   if(p[3]){const k=CAT.findIndex(t=>t[2]===p[3]);if(k>=0)setTone(k);}renderChips();req();}
 $("prod").innerHTML=PRODUCTS.map((p,i)=>`<option value="${i}">${p[0]} · ${fmt(p[1],1)} cm${p[2]!=="recto"?" · "+p[2]:""}</option>`).join("");
