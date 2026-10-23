@@ -1,0 +1,17 @@
+{
+  "name": "Visualizador de pisos (prototipo)",
+  "short_name": "Pisos",
+  "description": "Probá un piso de madera sobre la foto del ambiente: detección del piso, medida con una cota, ancho de tabla exacto y m² con cajas.",
+  "lang": "es-AR",
+  "start_url": "./prototipo-foto.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fafaf7",
+  "theme_color": "#b5651d",
+  "icons": [
+    { "src": "icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

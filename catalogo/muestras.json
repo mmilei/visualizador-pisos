@@ -1,0 +1,1192 @@
+[
+ {
+  "pagina": 3,
+  "nombre": "PISO PALO SANTO 3/4 X 4''",
+  "archivo": "muestras/piso-palo-santo-3-4-x-4.jpg",
+  "rgb_medio": "#947854",
+  "px": [
+   214,
+   231
+  ]
+ },
+ {
+  "pagina": 3,
+  "nombre": "PISO TERAPLANK 1 X 14''",
+  "archivo": "muestras/piso-teraplank-1-x-14.jpg",
+  "rgb_medio": "#886950",
+  "px": [
+   232,
+   219
+  ]
+ },
+ {
+  "pagina": 4,
+  "nombre": "PISO ROBLE HERRINGBONE 1/2 X 4''",
+  "archivo": "muestras/piso-roble-herringbone-1-2-x-4.jpg",
+  "rgb_medio": "#4f3725",
+  "px": [
+   238,
+   243
+  ]
+ },
+ {
+  "pagina": 4,
+  "nombre": "PISO ROBLE CHEVRON 1/2 X 4''",
+  "archivo": "muestras/piso-roble-chevron-1-2-x-4.jpg",
+  "rgb_medio": "#78686d",
+  "px": [
+   238,
+   243
+  ]
+ },
+ {
+  "pagina": 5,
+  "nombre": "PISO FUSION COMPOSITE CHEVRON NEVADO 3/8 X 5''",
+  "archivo": "muestras/piso-fusion-composite-chevron-nevado-3-8-x-5.jpg",
+  "rgb_medio": "#af8860",
+  "px": [
+   241,
+   399
+  ]
+ },
+ {
+  "pagina": 5,
+  "nombre": "PISO Y REVESTIMIENTO FUSION COMPOSITE BLACK OAK 3/8 X 7''",
+  "archivo": "muestras/piso-y-revestimiento-fusion-composite-black-oak-3-8-x-7.jpg",
+  "rgb_medio": "#444445",
+  "px": [
+   235,
+   207
+  ]
+ },
+ {
+  "pagina": 5,
+  "nombre": "PISO FUSION COMPOSITE ICE OAK 3/8 X 7''",
+  "archivo": "muestras/piso-fusion-composite-ice-oak-3-8-x-7.jpg",
+  "rgb_medio": "#8a7863",
+  "px": [
+   234,
+   183
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ASH PROA OAK",
+  "archivo": "muestras/ash-proa-oak.jpg",
+  "rgb_medio": "#b5b2af",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "SEPIA OAK",
+  "archivo": "muestras/sepia-oak.jpg",
+  "rgb_medio": "#b7a184",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "GRAFITO OAK",
+  "archivo": "muestras/grafito-oak.jpg",
+  "rgb_medio": "#63686c",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT DARK",
+  "archivo": "muestras/light-dark.jpg",
+  "rgb_medio": "#384154",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT CAOBA AFRICANA",
+  "archivo": "muestras/light-caoba-africana.jpg",
+  "rgb_medio": "#b57248",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HERRINGBONE AMERICANO HERRINGBONE WINTER GREY",
+  "archivo": "muestras/herringbone-americano-herringbone-winter-grey.jpg",
+  "rgb_medio": "#a1a3ab",
+  "px": [
+   106,
+   106
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "AFRICANA HERRINGBONE AMERICANO",
+  "archivo": "muestras/africana-herringbone-americano.jpg",
+  "rgb_medio": "#b09c8f",
+  "px": [
+   104,
+   104
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "TOBACCO OAK",
+  "archivo": "muestras/tobacco-oak.jpg",
+  "rgb_medio": "#59433f",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "OXIDUM VINTAGE OAK",
+  "archivo": "muestras/oxidum-vintage-oak.jpg",
+  "rgb_medio": "#836e5b",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "WHITE WASH OAK",
+  "archivo": "muestras/white-wash-oak.jpg",
+  "rgb_medio": "#b8b4ab",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT LAPACHO",
+  "archivo": "muestras/light-lapacho.jpg",
+  "rgb_medio": "#766358",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT ROBLE DE LOS PIRINEOS",
+  "archivo": "muestras/light-roble-de-los-pirineos.jpg",
+  "rgb_medio": "#b4895d",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HERRINGBONE FRENCH",
+  "archivo": "muestras/herringbone-french.jpg",
+  "rgb_medio": "#afa8a5",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT ROBLE DE LOS PIRINEOS HERRINGBONE PROA NATURAL",
+  "archivo": "muestras/light-roble-de-los-pirineos-herringbone-proa-natural.jpg",
+  "rgb_medio": "#b8afa6",
+  "px": [
+   105,
+   105
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "NATURAL OAK",
+  "archivo": "muestras/natural-oak.jpg",
+  "rgb_medio": "#998466",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "WILD GREY OAK",
+  "archivo": "muestras/wild-grey-oak.jpg",
+  "rgb_medio": "#705f4f",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "BLACK OAK",
+  "archivo": "muestras/black-oak.jpg",
+  "rgb_medio": "#4e5663",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT TEKA",
+  "archivo": "muestras/light-teka.jpg",
+  "rgb_medio": "#8a6242",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "GREY VINTAGE 4K",
+  "archivo": "muestras/grey-vintage-4k.jpg",
+  "rgb_medio": "#a0a3a7",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "CHEVRON NEVADO",
+  "archivo": "muestras/chevron-nevado.jpg",
+  "rgb_medio": "#b6a28b",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "GREY VINTAGE 4K HERRINGBONE NATURAL OAK",
+  "archivo": "muestras/grey-vintage-4k-herringbone-natural-oak.jpg",
+  "rgb_medio": "#ada193",
+  "px": [
+   105,
+   105
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "WINTER GREY OAK",
+  "archivo": "muestras/winter-grey-oak.jpg",
+  "rgb_medio": "#838687",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "PALE OAK",
+  "archivo": "muestras/pale-oak.jpg",
+  "rgb_medio": "#ac8f72",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "GREY OAK",
+  "archivo": "muestras/grey-oak.jpg",
+  "rgb_medio": "#868689",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT ROBLE NATIVO",
+  "archivo": "muestras/light-roble-nativo.jpg",
+  "rgb_medio": "#a58a70",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT LAPACHO IPE",
+  "archivo": "muestras/light-lapacho-ipe.jpg",
+  "rgb_medio": "#a8734a",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HERRINGBONE PALE OAK",
+  "archivo": "muestras/herringbone-pale-oak.jpg",
+  "rgb_medio": "#b29f89",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "REAL WOOD",
+  "archivo": "muestras/real-wood.jpg",
+  "rgb_medio": "#b2a085",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "MEGAPLANK NATURAL",
+  "archivo": "muestras/megaplank-natural.jpg",
+  "rgb_medio": "#938072",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "PALE PROA OAK",
+  "archivo": "muestras/pale-proa-oak.jpg",
+  "rgb_medio": "#d9bea3",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "AMERICAN OAK",
+  "archivo": "muestras/american-oak.jpg",
+  "rgb_medio": "#ac937a",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ASH OAK",
+  "archivo": "muestras/ash-oak.jpg",
+  "rgb_medio": "#797c7a",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT RUSTIC NATURAL",
+  "archivo": "muestras/light-rustic-natural.jpg",
+  "rgb_medio": "#ad9f97",
+  "px": [
+   75,
+   74
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT ROBLE DANUBIO",
+  "archivo": "muestras/light-roble-danubio.jpg",
+  "rgb_medio": "#bc9165",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HERRINGBONE NATURAL MATTE",
+  "archivo": "muestras/herringbone-natural-matte.jpg",
+  "rgb_medio": "#ae9d90",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "CHEVRON PALE OAK",
+  "archivo": "muestras/chevron-pale-oak.jpg",
+  "rgb_medio": "#caaa95",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "MEGAPLANK AMERICANO",
+  "archivo": "muestras/megaplank-americano.jpg",
+  "rgb_medio": "#a59389",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "NATURAL PROA OAK",
+  "archivo": "muestras/natural-proa-oak.jpg",
+  "rgb_medio": "#bf9473",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HONEY OAK",
+  "archivo": "muestras/honey-oak.jpg",
+  "rgb_medio": "#76583e",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ICE OAK",
+  "archivo": "muestras/ice-oak.jpg",
+  "rgb_medio": "#afaea9",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ICE PROA OAK",
+  "archivo": "muestras/ice-proa-oak.jpg",
+  "rgb_medio": "#989c9e",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LIGHT AMERICANO",
+  "archivo": "muestras/light-americano.jpg",
+  "rgb_medio": "#dfbd90",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HERRINGBONE NEVADO",
+  "archivo": "muestras/herringbone-nevado.jpg",
+  "rgb_medio": "#b19980",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "CHEVRON NATURAL MATTE",
+  "archivo": "muestras/chevron-natural-matte.jpg",
+  "rgb_medio": "#d5b098",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "NEVADO 4K",
+  "archivo": "muestras/nevado-4k.jpg",
+  "rgb_medio": "#9d9185",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "SILVER OAK",
+  "archivo": "muestras/silver-oak.jpg",
+  "rgb_medio": "#b1ada5",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "OLD FASHION OAK",
+  "archivo": "muestras/old-fashion-oak.jpg",
+  "rgb_medio": "#7e7b65",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LAPACHO RUSTIC OAK",
+  "archivo": "muestras/lapacho-rustic-oak.jpg",
+  "rgb_medio": "#6d5041",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ANTIQUE OAK",
+  "archivo": "muestras/antique-oak.jpg",
+  "rgb_medio": "#a4825a",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "OXIDUM OAK",
+  "archivo": "muestras/oxidum-oak.jpg",
+  "rgb_medio": "#4b4c47",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "TERAPLANK",
+  "archivo": "muestras/teraplank.jpg",
+  "rgb_medio": "#d49f68",
+  "px": [
+   77,
+   155
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "NEVADO OAK",
+  "archivo": "muestras/nevado-oak.jpg",
+  "rgb_medio": "#b69565",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HONEY OAK",
+  "archivo": "muestras/honey-oak-p11.jpg",
+  "rgb_medio": "#91734a",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "GREY OAK",
+  "archivo": "muestras/grey-oak-p11.jpg",
+  "rgb_medio": "#969483",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "BLACK OAK",
+  "archivo": "muestras/black-oak-p11.jpg",
+  "rgb_medio": "#353530",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "SAND BRUSHED OAK",
+  "archivo": "muestras/sand-brushed-oak.jpg",
+  "rgb_medio": "#99897c",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "HABANO OAK",
+  "archivo": "muestras/habano-oak.jpg",
+  "rgb_medio": "#7b5441",
+  "px": [
+   75,
+   74
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "COFEE BROWN OAK",
+  "archivo": "muestras/cofee-brown-oak.jpg",
+  "rgb_medio": "#5d5a54",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "WINTER GREY OAK",
+  "archivo": "muestras/winter-grey-oak-p11.jpg",
+  "rgb_medio": "#979b92",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ASPEN OAK",
+  "archivo": "muestras/aspen-oak.jpg",
+  "rgb_medio": "#ddd8b5",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ALPINO OAK",
+  "archivo": "muestras/alpino-oak.jpg",
+  "rgb_medio": "#bbad88",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "PLATINUM DARK OAK",
+  "archivo": "muestras/platinum-dark-oak.jpg",
+  "rgb_medio": "#686c6f",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "LAPACHO",
+  "archivo": "muestras/lapacho.jpg",
+  "rgb_medio": "#5f3815",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "PALO SANTO",
+  "archivo": "muestras/palo-santo.jpg",
+  "rgb_medio": "#78582f",
+  "px": [
+   75,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ROBLE ESLAVONIA",
+  "archivo": "muestras/roble-eslavonia.jpg",
+  "rgb_medio": "#c4965e",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ROBLE CHEVRON",
+  "archivo": "muestras/roble-chevron.jpg",
+  "rgb_medio": "#ab9284",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 11,
+  "nombre": "ROBLE HERRINGBONE",
+  "archivo": "muestras/roble-herringbone.jpg",
+  "rgb_medio": "#ac988b",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT",
+  "archivo": "muestras/fusion-slat.jpg",
+  "rgb_medio": "#746359",
+  "px": [
+   75,
+   56
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "NATURAL OAK",
+  "archivo": "muestras/natural-oak-p12.jpg",
+  "rgb_medio": "#bf9268",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "GREY OAK",
+  "archivo": "muestras/grey-oak-p12.jpg",
+  "rgb_medio": "#908178",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ALPINO OAK",
+  "archivo": "muestras/alpino-oak-p12.jpg",
+  "rgb_medio": "#c8bab0",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "NATURAL PROA OAK",
+  "archivo": "muestras/natural-proa-oak-p12.jpg",
+  "rgb_medio": "#a88f83",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "NEVADO OAK",
+  "archivo": "muestras/nevado-oak-p12.jpg",
+  "rgb_medio": "#ab9889",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "NATURAL MEGA PLANK OAK",
+  "archivo": "muestras/natural-mega-plank-oak.jpg",
+  "rgb_medio": "#7f6149",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "HONEY",
+  "archivo": "muestras/honey.jpg",
+  "rgb_medio": "#826b52",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE HONEY",
+  "archivo": "muestras/deck-fusion-advance-honey.jpg",
+  "rgb_medio": "#af9772",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT SAND",
+  "archivo": "muestras/fusion-slat-sand.jpg",
+  "rgb_medio": "#9f7f5c",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT GRAFITO",
+  "archivo": "muestras/fusion-slat-grafito.jpg",
+  "rgb_medio": "#7d8283",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE LAPACHO",
+  "archivo": "muestras/deck-fusion-advance-lapacho.jpg",
+  "rgb_medio": "#65523c",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT LAPACHO",
+  "archivo": "muestras/fusion-slat-lapacho.jpg",
+  "rgb_medio": "#746459",
+  "px": [
+   75,
+   59
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT GREY",
+  "archivo": "muestras/fusion-slat-grey.jpg",
+  "rgb_medio": "#979692",
+  "px": [
+   72,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE SAND",
+  "archivo": "muestras/deck-fusion-advance-sand.jpg",
+  "rgb_medio": "#9e8165",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT HONEY",
+  "archivo": "muestras/fusion-slat-honey.jpg",
+  "rgb_medio": "#887a64",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK LAPACHO",
+  "archivo": "muestras/deck-lapacho.jpg",
+  "rgb_medio": "#543213",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "FUSION SLAT SNOW",
+  "archivo": "muestras/fusion-slat-snow.jpg",
+  "rgb_medio": "#d3d8d3",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK TRAIN GREY",
+  "archivo": "muestras/deck-train-grey.jpg",
+  "rgb_medio": "#81899a",
+  "px": [
+   75,
+   72
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK TRAIN LAPACHO",
+  "archivo": "muestras/deck-train-lapacho.jpg",
+  "rgb_medio": "#857367",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE VINTAGE GREY",
+  "archivo": "muestras/deck-fusion-advance-vintage-grey.jpg",
+  "rgb_medio": "#82877d",
+  "px": [
+   75,
+   74
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK TRAIN HONEY",
+  "archivo": "muestras/deck-train-honey.jpg",
+  "rgb_medio": "#a69a7e",
+  "px": [
+   75,
+   72
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE GRAFITO",
+  "archivo": "muestras/deck-fusion-advance-grafito.jpg",
+  "rgb_medio": "#4a4e51",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE SNOW",
+  "archivo": "muestras/deck-fusion-advance-snow.jpg",
+  "rgb_medio": "#dcdfd8",
+  "px": [
+   39,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "DECK FUSION ADVANCE SNOW",
+  "archivo": "muestras/deck-fusion-advance-snow-p12.jpg",
+  "rgb_medio": "#d9dfd8",
+  "px": [
+   39,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "AMERICAN OAK",
+  "archivo": "muestras/american-oak-p12.jpg",
+  "rgb_medio": "#ac937a",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "VAIL",
+  "archivo": "muestras/vail.jpg",
+  "rgb_medio": "#d1d2ce",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "BEIGE",
+  "archivo": "muestras/beige.jpg",
+  "rgb_medio": "#c4bebe",
+  "px": [
+   76,
+   76
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "GREY PEARL",
+  "archivo": "muestras/grey-pearl.jpg",
+  "rgb_medio": "#86847f",
+  "px": [
+   76,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "WHITE",
+  "archivo": "muestras/white.jpg",
+  "rgb_medio": "#e7e5e8",
+  "px": [
+   75,
+   74
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "TRAVERTINO",
+  "archivo": "muestras/travertino.jpg",
+  "rgb_medio": "#a5a6a0",
+  "px": [
+   75,
+   74
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "BLACK",
+  "archivo": "muestras/black.jpg",
+  "rgb_medio": "#312c28",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ASH OAK",
+  "archivo": "muestras/ash-oak-p12.jpg",
+  "rgb_medio": "#72757d",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "GREY OAK",
+  "archivo": "muestras/grey-oak-p12.jpg",
+  "rgb_medio": "#514f55",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ROSE GOLD",
+  "archivo": "muestras/rose-gold.jpg",
+  "rgb_medio": "#d6c7b9",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "OXIDUM",
+  "archivo": "muestras/oxidum.jpg",
+  "rgb_medio": "#3a322e",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "PORTORO",
+  "archivo": "muestras/portoro.jpg",
+  "rgb_medio": "#2e343e",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "KARPATOS",
+  "archivo": "muestras/karpatos.jpg",
+  "rgb_medio": "#e3ddd5",
+  "px": [
+   73,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "LEGACY OAK DEEP BRUSHED",
+  "archivo": "muestras/legacy-oak-deep-brushed.jpg",
+  "rgb_medio": "#7d613c",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ANTIQ OAK DEEP BRUSHED",
+  "archivo": "muestras/antiq-oak-deep-brushed.jpg",
+  "rgb_medio": "#705634",
+  "px": [
+   74,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "PRISMA OAK DEEP BRUSHED",
+  "archivo": "muestras/prisma-oak-deep-brushed.jpg",
+  "rgb_medio": "#715738",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ACOUSTIC CYPRESS OAK",
+  "archivo": "muestras/acoustic-cypress-oak.jpg",
+  "rgb_medio": "#a19a84",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ACOUSTIC LARIX OAK",
+  "archivo": "muestras/acoustic-larix-oak.jpg",
+  "rgb_medio": "#88785b",
+  "px": [
+   75,
+   75
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ACOUSTIC EBONY OAK FUSION FIBREX | Pisos y revestimientos",
+  "archivo": "muestras/acoustic-ebony-oak-fusion-fibrex-pisos-y-revestimientos.jpg",
+  "rgb_medio": "#382518",
+  "px": [
+   104,
+   104
+  ]
+ },
+ {
+  "pagina": 12,
+  "nombre": "ACOUSTIC MAPLE OAK",
+  "archivo": "muestras/acoustic-maple-oak.jpg",
+  "rgb_medio": "#aca287",
+  "px": [
+   75,
+   74
+  ]
+ }
+]
