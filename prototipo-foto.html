@@ -64,6 +64,13 @@
   .chip{border:1px solid var(--border,#dcdcd6);border-radius:999px;min-height:40px;padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--foreground,#1d1d1f);display:flex;align-items:center;gap:6px}
   .chip.on{border-color:var(--accent,#b5651d);box-shadow:inset 0 0 0 2px var(--accent,#b5651d);font-weight:600}
   .chip:disabled{opacity:.4}
+  .plist{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto;border:1px solid var(--border,#dcdcd6);border-radius:10px;padding:4px}
+  .plist .sep{font-size:11px;color:var(--muted-foreground,#6b6b70);padding:6px 6px 2px;text-transform:uppercase;letter-spacing:.04em}
+  .pitem{display:flex;align-items:center;gap:10px;border:1px solid transparent;border-radius:8px;padding:4px 6px;cursor:pointer;background:transparent;color:inherit;font:inherit;font-size:14px;text-align:left;min-height:48px}
+  .pitem img{width:40px;height:40px;border-radius:6px;object-fit:cover;flex:none;background:#8884}
+  .pitem .nm{flex:1;line-height:1.25}.pitem .nm small{display:block;color:var(--muted-foreground,#6b6b70);font-size:12px}
+  .pitem .ok{font-size:12px;font-weight:600;color:#30a46c;white-space:nowrap}.pitem .ok.err{color:#e5484d}.pitem .ok.wait{color:#999}
+  .pitem.on{border-color:var(--accent,#b5651d);box-shadow:inset 0 0 0 1px var(--accent,#b5651d)}
   .sw{width:14px;height:14px;border-radius:3px;display:inline-block}
   .calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:12px}
   .kpi{border:1px solid var(--border,#dcdcd6);border-radius:8px;padding:8px}
@@ -131,10 +138,11 @@
     <div class="geo" id="geo"></div>
 
     <div class="ctrls">
-      <label style="grid-column:1/-1"><span class="row">Producto</span><select class="btn" id="prod"></select></label>
+      <div class="lab" style="grid-column:1/-1"><span class="row">Producto</span><select id="prod" hidden></select><div class="plist" id="plist"></div></div>
       <label style="grid-column:1/-1"><span class="row">Tono <span class="sub" id="toneInfo"></span></span>
         <span class="row" style="justify-content:flex-start;gap:10px"><img id="toneImg" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover;flex:none;background:#8884"><select class="btn" id="tone"></select></span></label>
       <label><span class="row">Ancho de tabla <b id="wv"></b></span><input id="w" type="range" min="7" max="40" step="0.1" value="20.3"></label>
+      <label><span class="row">Largo de tabla <b id="lenv"></b></span><input id="len" type="range" min="30" max="300" step="5" value="160"></label>
       <label><span class="row">Intensidad de luz de la foto <b id="lv"></b></span><input id="light" type="range" min="0" max="150" value="100"></label>
       <label><span class="row">Antes / después (divisor) <b id="sv"></b></span><input id="split" type="range" min="0" max="100" value="0"></label>
       <label><span class="row">Suavizado de la luz <b id="bv"></b></span><input id="blur" type="range" min="1" max="8" step="0.5" value="2.5"></label>
@@ -307,7 +315,7 @@ in vec2 vP;out vec4 o;
 uniform sampler2D uPhoto,uLight,uMask,uAO;
 uniform float uGloss,uMean,uAOk;
 uniform vec2 uSize;uniform mat3 uHinv;
-uniform float uW,uLightK,uSplit,uPat,uDir,uShow,uShowMask;
+uniform float uW,uLen,uLightK,uSplit,uPat,uDir,uShow,uShowMask;
 uniform vec3 uTone;
 uniform sampler2D uWood;uniform vec3 uWoodMean;uniform vec2 uTexM;uniform float uOwn,uRefl,uRough,uFS;uniform vec2 uC;uniform vec3 uN;
 float h11(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
@@ -329,7 +337,7 @@ void main(){
   float w=uW;
   vec2 id;float along,across,dA,dL,len;
   if(uPat<.5){
-    float L=1.6,J=.7;
+    float L=uLen,J=.7;
     float col=floor(f.x/w),u=f.x-col*w;
     float t=f.y+h11(vec2(col,7.))*L*4.;
     float k=floor(t/L);
@@ -340,7 +348,7 @@ void main(){
       if(t>=b1){s0=b1;k+=1.;s1=(k+1.)*L+(h11(vec2(col,k+1.))-.5)*J*L;}else{s0=bk;s1=b1;}}
     id=vec2(col,k);along=t-s0;len=s1-s0;across=u;dA=min(u,w-u);dL=min(along,len-along);
   }else if(uPat<1.5){
-    float Lp=.6,c=Lp*.70710678,hh=w*1.41421356;
+    float Lp=uLen,c=Lp*.70710678,hh=w*1.41421356;
     float col=floor(f.x/c),u=f.x-col*c;
     float sg=mod(col,2.)<.5?-1.:1.;
     float yp=sg>0.?f.y-u:f.y-(c-u);
@@ -349,7 +357,7 @@ void main(){
     dA=min(v,hh-v)*.70710678;dL=min(u,c-u);
   }else{
     // espiga (herringbone) a 45°: tablas de ancho w y largo n·w (~60 cm), en escalera; red de períodos (n,-n)
-    float n=max(2.,floor(.6/w+.5));
+    float n=max(2.,floor(uLen/w+.5));
     vec2 r=vec2(f.x+f.y,f.y-f.x)*.70710678/w;
     float j0=floor((r.x-r.y+n+1.)/(2.*n));
     id=vec2(0.);along=0.;across=0.;len=n*w;bool hit=false;
@@ -445,7 +453,7 @@ function initGL(){
   prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
   gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  ["uPhoto","uLight","uMask","uAO","uGloss","uMean","uAOk","uSize","uHinv","uW","uLightK","uSplit","uPat","uDir","uShow","uShowMask","uTone",
+  ["uPhoto","uLight","uMask","uAO","uGloss","uMean","uAOk","uSize","uHinv","uW","uLen","uLightK","uSplit","uPat","uDir","uShow","uShowMask","uTone",
    "uWood","uWoodMean","uTexM","uOwn","uRefl","uRough","uFS","uC","uN"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
@@ -884,7 +892,7 @@ let raf=0;const req=()=>{if(!raf)raf=requestAnimationFrame(()=>render());};
 function render(opts={}){
   raf=0;
   const w=+$("w").value/100,lk=+$("light").value/100,sp=+$("split").value/100;
-  $("wv").textContent=fmt(w*100,1)+" cm"+(PRODUCTS[st.prod]&&Math.abs(PRODUCTS[st.prod][1]-w*100)<.05?" (catálogo)":" (manual)");$("lv").textContent=Math.round(lk*100)+"%";
+  $("wv").textContent=fmt(w*100,1)+" cm"+(PRODUCTS[st.prod]&&Math.abs(PRODUCTS[st.prod][1]-w*100)<.05?" (catálogo)":" (manual)");$("lv").textContent=Math.round(lk*100)+"%";$("lenv").textContent=fmt(+$("len").value/100,2)+" m";
   $("sv").textContent=sp===0?"después":sp===1?"antes":Math.round(sp*100)+"% antes";$("bv").textContent=fmt($("blur").value,1)+"%";
   if(!glOK||!st.W){kpis(w);return;}
   if(st.maskDirty)composeMask();
@@ -897,7 +905,7 @@ function render(opts={}){
   gl.uniformMatrix3fv(U.uHinv,true,new Float32Array(st.Hinv||[1,0,0,0,1,0,0,0,1]));
   gl.uniform1f(U.uGloss,+$("gloss").value/100);gl.uniform1f(U.uMean,st.lightMean||.2);gl.uniform1f(U.uAOk,+$("ao").value/100*.45);
   $("gv").textContent=$("gloss").value==="0"?"apagado":$("gloss").value+"%";$("av").textContent=$("ao").value+"%";
-  gl.uniform1f(U.uW,w);gl.uniform1f(U.uLightK,lk);gl.uniform1f(U.uSplit,opts.noSplit?0:sp);
+  gl.uniform1f(U.uW,w);gl.uniform1f(U.uLen,+$("len").value/100);gl.uniform1f(U.uLightK,lk);gl.uniform1f(U.uSplit,opts.noSplit?0:sp);
   gl.uniform1f(U.uPat,{recto:0,chevron:1,espiga:2}[st.pattern]);gl.uniform1f(U.uDir,st.dir);gl.uniform1f(U.uShow,st.ok?1:0);
   const showM=!opts.noSplit&&($("showMask").checked||st.tool==="mas"||st.tool==="menos");
   gl.uniform1f(U.uShowMask,showM?1:0);
@@ -932,7 +940,7 @@ function kpis(w){
   $("k0").textContent=st.area==null?"–":fmt(st.area,1)+" m²";
   $("k5").textContent=st.hull==null?"–":fmt(st.hull,1)+" m²";
   if(sel==null){["k2","k3","k4"].forEach(i=>$(i).textContent="–");return;}
-  const waste=st.pattern==="recto"?.07:.12,tot=sel*(1+waste),Lavg=st.pattern==="recto"?1.6:.6; // largos supuestos
+  const waste=st.pattern==="recto"?.07:.12,tot=sel*(1+waste),Lavg=+$("len").value/100*(st.pattern==="recto"?1:1); // largo del slider
   $("k2").textContent=fmt(tot,1)+" m²";$("k3").textContent=Math.ceil(tot/2);$("k4").textContent="~"+Math.ceil(tot/(w*Lavg));
 }
 
@@ -953,16 +961,33 @@ function fillTones(){const g={};CAT.forEach((t,i)=>{(g[t[3]]=g[t[3]]||[]).push(`
 function setTone(i){st.tone=i;const t=CAT[i];
   if(glOK){const o=TEX_OWN[t[2]],w=o?{src:o,m:[.22,.44],own:1}:TEX_GEN;if(!texWant||w.src!==texWant.src)loadWood(w);}$("tone").value=String(i);$("toneImg").src="catalogo/"+t[2];$("toneInfo").textContent=`${t[1]} · aproximado`;req();}
 function setProd(i){st.prod=i;const p=PRODUCTS[i];$("prod").value=String(i);$("w").value=p[1];st.pattern=p[2];
+  $("len").value=p[2]==="recto"?160:60;
+  document.querySelectorAll(".pitem").forEach(b=>b.classList.toggle("on",+b.dataset.i===i));
   if(p[3]){const k=CAT.findIndex(t=>t[2]===p[3]);if(k>=0)setTone(k);}renderChips();req();}
 $("prod").innerHTML=PRODUCTS.map((p,i)=>`<option value="${i}">${p[0]} · ${fmt(p[1],1)} cm${p[2]!=="recto"?" · "+p[2]:""}</option>`).join("");
 $("prod").onchange=()=>setProd(+$("prod").value);
+// Lista de productos: primero los que tienen veta propia (con el check de que la textura cargó), después el resto.
+(()=>{const own=i=>!!(PRODUCTS[i][3]&&TEX_OWN[PRODUCTS[i][3]]);
+  const idx=PRODUCTS.map((_,i)=>i),a=idx.filter(own),b=idx.filter(i=>!own(i));
+  const item=i=>{const p=PRODUCTS[i],o=own(i),img=p[3]?`catalogo/${p[3]}`:"";
+    return `<button type="button" class="pitem" data-i="${i}">${img?`<img src="${o?TEX_OWN[p[3]]:img}" alt="" loading="lazy">`:`<img alt="" style="visibility:hidden">`}
+      <span class="nm">${p[0]}<small>${fmt(p[1],1)} cm${p[2]!=="recto"?" · "+p[2]:""}</small></span>
+      ${o?`<span class="ok wait" data-tex="${TEX_OWN[p[3]]}">…</span>`:""}</button>`;};
+  $("plist").innerHTML=`<div class="sep">Con veta propia</div>${a.map(item).join("")}<div class="sep">Veta genérica (tono aproximado)</div>${b.map(item).join("")}`;
+  $("plist").onclick=e=>{const b=e.target.closest(".pitem");if(b)setProd(+b.dataset.i);};
+  document.querySelectorAll(".pitem .ok").forEach(el=>{const im=new Image();
+    im.onload=()=>{const ok=im.naturalWidth>=256;el.className="ok"+(ok?"":" err");el.textContent=ok?"✓ veta":"✗ veta";
+      el.title=ok?`textura cargada (${im.naturalWidth}×${im.naturalHeight})`:"textura muy chica";};
+    im.onerror=()=>{el.className="ok err";el.textContent="✗ veta";el.title="no se pudo cargar la textura";};
+    im.src=el.dataset.tex;});
+  document.querySelectorAll(".pitem").forEach(b=>b.classList.toggle("on",+b.dataset.i===st.prod));})();
 $("tone").onchange=()=>setTone(+$("tone").value);
 fillTones();setProd(0);
 if(location.protocol!=="file:")fetch("catalogo/muestras.json").then(r=>r.ok?r.json():null).then(d=>{if(!d)return;
   const cur=CAT[st.tone][2];CAT=d.map(x=>[x.nombre,x.rgb_medio,x.archivo,x.pagina]);
   st.tone=Math.max(0,CAT.findIndex(t=>t[2]===cur));fillTones();setTone(st.tone);}).catch(()=>{});
 renderChips();
-["w","light","split","gloss","ao","refl"].forEach(id=>$(id).oninput=req);
+["w","len","light","split","gloss","ao","refl"].forEach(id=>$(id).oninput=req);
 $("blur").oninput=()=>{st.lightDirty=true;req();};
 function syncAB(){const ab=$("useAB").checked;$("abL").style.display=ab?"flex":"none";$("d12").disabled=ab;}
 $("dist").oninput=$("d12").oninput=()=>{solveGeom();drawOverlay();req();};
