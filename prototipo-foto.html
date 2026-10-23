@@ -444,7 +444,12 @@ let prog,U={},texPhoto,texLight,texMask,texAO,texWood,woodMean=[.218,.218,.218];
 // Real-ESRGAN (texturas/CREDITOS.md), un tile = 22 × 44 cm. Se eligen por la muestra del tono.
 const TEX_GEN={src:"texturas/roble.jpg",m:[1.83,1.83],own:0};
 const TEX_OWN={"muestras/roble-eslavonia.jpg":"texturas/roble-eslavonia.jpg","muestras/lapacho.jpg":"texturas/lapacho.jpg",
-  "muestras/nevado-oak.jpg":"texturas/nevado-oak.jpg"};
+  "muestras/nevado-oak.jpg":"texturas/nevado-oak.jpg","muestras/palo-santo.jpg":"texturas/palo-santo.jpg",
+  "muestras/teraplank.jpg":"texturas/teraplank.jpg","muestras/black-oak.jpg":"texturas/black-oak.jpg",
+  "muestras/deck-lapacho.jpg":"texturas/deck-lapacho.jpg","muestras/deck-fusion-advance-snow.jpg":"texturas/deck-fusion-advance-snow.jpg",
+  "muestras/roble-chevron.jpg":"texturas/roble-chevron.jpg",
+  // la muestra de espiga trae juntas en todo el recorte: usa la veta del chevron, que es el mismo roble
+  "muestras/roble-herringbone.jpg":"texturas/roble-chevron.jpg"};
 let texCur=TEX_GEN,texWant=null;
 function initGL(){
   if(!gl){$("empty").innerHTML="Este navegador no tiene WebGL2. Probá con Safari 15+, Chrome o Edge.";return false;}
