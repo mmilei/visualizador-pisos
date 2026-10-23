@@ -138,6 +138,7 @@
       <label><span class="row">Intensidad de luz de la foto <b id="lv"></b></span><input id="light" type="range" min="0" max="150" value="100"></label>
       <label><span class="row">Antes / después (divisor) <b id="sv"></b></span><input id="split" type="range" min="0" max="100" value="0"></label>
       <label><span class="row">Suavizado de la luz <b id="bv"></b></span><input id="blur" type="range" min="1" max="8" step="0.5" value="2.5"></label>
+      <label><span class="row">Reflejo del piso (acabado) <b id="rv"></b></span><input id="refl" type="range" min="0" max="100" value="40"></label>
       <label><span class="row">Brillo/reflejo de la foto <b id="gv"></b></span><input id="gloss" type="range" min="0" max="100" value="0"></label>
       <label><span class="row">Sombra de contacto <b id="av"></b></span><input id="ao" type="range" min="0" max="100" value="50"></label>
       <div class="lab"><span class="row">Patrón</span><span class="chips" id="pat"></span></div>
@@ -308,6 +309,7 @@ uniform float uGloss,uMean,uAOk;
 uniform vec2 uSize;uniform mat3 uHinv;
 uniform float uW,uLightK,uSplit,uPat,uDir,uShow,uShowMask;
 uniform vec3 uTone;
+uniform sampler2D uWood;uniform vec3 uWoodMean;uniform float uWoodM,uRefl,uRough,uFS;uniform vec2 uC;uniform vec3 uN;
 float h11(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(h11(i),h11(i+vec2(1,0)),f.x),mix(h11(i+vec2(0,1)),h11(i+vec2(1,1)),f.x),f.y);}
@@ -360,15 +362,16 @@ void main(){
     dA=min(across,w-across);dL=min(along,len-along);
   }
   float r1=h11(id+.17),r2=h11(id*1.7+3.1),r3=h11(id*.37+9.3);
-  vec3 hsl=vec3(uTone.x+(r2-.5)*5.,uTone.y,clamp(uTone.z+(r1-.5)*.11,0.,1.));
+  // variación entre tablas chica (±2% de luminosidad, ±1,5° de matiz): en los pisos reales casi no se distinguen
+  vec3 hsl=vec3(uTone.x+(r2-.5)*3.,uTone.y*.92,clamp(uTone.z+(r1-.5)*.04,0.,1.));
   vec3 col=lin(hsl2rgb(hsl));
-  float warp=fbm(vec2(along*1.3+r3*50.,across*5.+r1*20.))*2.2+fbm(vec2(along*.35,r2*9.))*1.5;
-  float gq=across*26.+warp+r2*10.;
-  float rings=fract(gq);
-  float ring=smoothstep(.0,.08,rings)*smoothstep(.32,.10,rings);
-  float streak=fbm(vec2(along*.7+r1*30.,across*55.));
-  float aR=clamp(1.-fwl*26.*2.5,0.,1.),aS=clamp(1.-fwl*55.*1.5,0.,1.);
-  col*=1.-(.16*aR*ring+.30*aS*(streak-.5));
+  // veta real: foto de chapa de roble (texturas/roble.jpg, un tile = uWoodM metros, veta a lo largo del eje v),
+  // con un recorte distinto por tabla y espejada en la mitad; se recolorea al tono del producto (col × textura/media)
+  vec2 tuv=vec2(across+r1*uWoodM*7.,along+r3*uWoodM*11.)/uWoodM;
+  if(r2>.5)tuv.x=-tuv.x;
+  vec2 gx=vec2(dFdx(f.x),dFdx(f.y))/uWoodM,gy=vec2(dFdy(f.x),dFdy(f.y))/uWoodM;
+  // contraste de veta a 0,6: los pisos reales de referencia (roble natural, satinado) tienen veta fina y suave
+  col*=pow(lin(textureGrad(uWood,tuv,gx,gy).rgb)/max(uWoodMean,vec3(1e-3)),vec3(.6));
   float jw=.0011,de=min(dA,dL);
   float cov=clamp((jw+.5*fwl-de)/fwl,0.,1.)*min(1.,2.*jw/fwl);
   col*=mix(1.,.28,cov);
@@ -383,6 +386,39 @@ void main(){
   vec3 pl=lin(photo);float lp=dot(pl,vec3(.2126,.7152,.0722)),low=max(s,.02)*uMean;
   float hl=clamp(uGloss*max(lp-low*1.3,0.)/max(low,.05),0.,.85);
   col=1.-(1.-col)*(1.-hl); // mezcla "screen": el reflejo aclara sin lavar todo el piso
+  // reflejo del piso como espejo plano. Supuesto: lo que se refleja (paredes, muebles) se levanta vertical donde
+  // termina la máscara del piso. Se avanza por el piso en la dirección del rayo hasta salir de la máscara (base B),
+  // y el reflejo es el punto de la foto a la altura h sobre B que el espejo devuelve. Borroso según la altura
+  // (acabado mate = más borroso) y pesado por Fresnel: casi nada mirando hacia abajo, mucho en ángulo rasante.
+  if(uRefl>0.&&valid>0.&&m>.01){
+    vec3 r=vec3((vP-uC)/uFS,1.);float an=dot(uN,r);
+    vec3 hz=r-an*uN;float lh=length(hz);
+    if(an>1e-5&&lh>1e-5){
+      vec3 X=r/an,u=hz/lh;float hk=an/lh,s0=0.,s1=0.,ds=.02;bool hit=false;
+      for(int i=0;i<40;i++){
+        s1=s0+ds;vec3 B=X+u*s1;if(B.z<=1e-4)break;
+        vec2 pb=B.xy/B.z*uFS+uC;
+        if(pb.x<0.||pb.y<0.||pb.x>uSize.x||pb.y>uSize.y)break;
+        if(texture(uMask,pb/uSize).r<.5){hit=true;break;}
+        s0=s1;ds*=1.15;
+      }
+      if(hit){
+        for(int i=0;i<6;i++){float sm=.5*(s0+s1);vec3 B=X+u*sm;
+          if(texture(uMask,(B.xy/B.z*uFS+uC)/uSize).r<.5)s1=sm;else s0=sm;}
+        float h=s1*hk;vec3 Wp=X+u*s1-h*uN;
+        if(Wp.z>1e-4){
+          vec2 q=Wp.xy/Wp.z*uFS+uC;
+          float inb=step(0.,q.x)*step(0.,q.y)*step(q.x,uSize.x)*step(q.y,uSize.y);
+          float ct=an/length(r),F=.04+.96*pow(1.-ct,5.);
+          float lod=uRough*clamp(1.5+log2(1.+h*12.),0.,8.);
+          vec3 rc=lin(textureLod(uPhoto,q/uSize,lod).rgb);
+          // la foto clava las ventanas en blanco: HDR aproximado para que su reflejo se note como en una foto real
+          rc*=1.+3.*smoothstep(.7,1.,dot(rc,vec3(.2126,.7152,.0722)));
+          col=mix(col,rc,clamp(uRefl*F*1.6,0.,.9)*inb*(1.-.7*cov));
+        }
+      }
+    }
+  }
   col=col/(1.+max(col-.8,0.)*.8);
   vec3 nc=srgb(min(col,1.));
   float a=m*valid*uShow;
@@ -393,7 +429,8 @@ void main(){
   if(uSplit>0.&&uSplit<1.)res=mix(res,vec3(1.),sl*.9);
   o=vec4(res,1.);
 }`;
-let prog,U={},texPhoto,texLight,texMask,texAO;
+let prog,U={},texPhoto,texLight,texMask,texAO,texWood,woodMean=[.218,.218,.218];
+const WOOD_M=1.83; // metros que cubre un tile de texturas/roble.jpg
 function initGL(){
   if(!gl){$("empty").innerHTML="Este navegador no tiene WebGL2. Probá con Safari 15+, Chrome o Edge.";return false;}
   const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);
@@ -401,7 +438,8 @@ function initGL(){
   prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
   gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-  ["uPhoto","uLight","uMask","uAO","uGloss","uMean","uAOk","uSize","uHinv","uW","uLightK","uSplit","uPat","uDir","uShow","uShowMask","uTone"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+  ["uPhoto","uLight","uMask","uAO","uGloss","uMean","uAOk","uSize","uHinv","uW","uLightK","uSplit","uPat","uDir","uShow","uShowMask","uTone",
+   "uWood","uWoodMean","uWoodM","uRefl","uRough","uFS","uC","uN"].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
   const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
   const loc=gl.getAttribLocation(prog,"aPos");gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
@@ -411,6 +449,26 @@ function initGL(){
   texPhoto=mk();texLight=mk();texMask=mk();texAO=mk();
   gl.uniform1i(U.uPhoto,0);gl.uniform1i(U.uLight,1);gl.uniform1i(U.uMask,2);gl.uniform1i(U.uAO,3);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
+  // textura de madera (unidad 4): repetida, con mipmaps y anisotrópico para el piso en ángulo rasante.
+  // Hasta que carga, un gris neutro (la tabla queda del tono liso).
+  texWood=gl.createTexture();gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,texWood);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([128,128,128,255]));
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.uniform1i(U.uWood,4);gl.activeTexture(gl.TEXTURE0);
+  const wim=new Image();
+  wim.onload=()=>{
+    gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,texWood);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,wim);gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+    const an=gl.getExtension("EXT_texture_filter_anisotropic");
+    if(an)gl.texParameterf(gl.TEXTURE_2D,an.TEXTURE_MAX_ANISOTROPY_EXT,Math.min(8,gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    gl.activeTexture(gl.TEXTURE0);
+    const c=document.createElement("canvas");c.width=c.height=64;const g=c.getContext("2d");g.drawImage(wim,0,0,64,64);
+    const d=g.getImageData(0,0,64,64).data,mm=[0,0,0];
+    for(let i=0;i<64*64;i++)for(let k=0;k<3;k++)mm[k]+=Math.pow(d[i*4+k]/255,2.2)/(64*64);
+    woodMean=mm;req();};
+  wim.src="texturas/roble.jpg";
   return true;
 }
 const glOK=(()=>{try{return initGL()}catch(e){console.error(e);$("empty").textContent="Error de WebGL: "+e.message;return false}})();
@@ -669,6 +727,8 @@ async function loadBlob(blob,preset,name){
   cv.width=W;cv.height=H;gl.viewport(0,0,W,H);
   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texPhoto);
   gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  // mipmaps de la foto: el reflejo la lee borrosa (textureLod) según el acabado y la altura de lo reflejado
+  gl.generateMipmap(gl.TEXTURE_2D);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
   const d=c.getContext("2d").getImageData(0,0,W,H).data,n=W*H;
   const Ir=new Float32Array(n),Ig=new Float32Array(n),Ib=new Float32Array(n);
   for(let i=0;i<n;i++){Ir[i]=d[i*4]/255;Ig[i]=d[i*4+1]/255;Ib[i]=d[i*4+2]/255;}
@@ -830,6 +890,11 @@ function render(opts={}){
   const showM=!opts.noSplit&&($("showMask").checked||st.tool==="mas"||st.tool==="menos");
   gl.uniform1f(U.uShowMask,showM?1:0);
   const t=hex2hsl(CAT[st.tone][1]);gl.uniform3f(U.uTone,t[0],t[1],t[2]);
+  const G=st.ok&&st.geo&&st.geo.cam,rv=+$("refl").value/100;
+  gl.uniform1f(U.uFS,G?G.S*G.f:1);gl.uniform2f(U.uC,G?G.cx:0,G?G.cy:0);gl.uniform3fv(U.uN,G?G.n:[0,1,0]);
+  gl.uniform1f(U.uRefl,G?rv:0);gl.uniform1f(U.uRough,.6+2.6*(1-rv));
+  gl.uniform3fv(U.uWoodMean,woodMean);gl.uniform1f(U.uWoodM,WOOD_M);
+  $("rv").textContent=rv<.03?"apagado":rv<.35?"mate":rv<.7?"satinado":"laqueado";
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 }
 window.__render=render;window.__computeArea=computeArea;
@@ -884,7 +949,7 @@ if(location.protocol!=="file:")fetch("catalogo/muestras.json").then(r=>r.ok?r.js
   const cur=CAT[st.tone][2];CAT=d.map(x=>[x.nombre,x.rgb_medio,x.archivo,x.pagina]);
   st.tone=Math.max(0,CAT.findIndex(t=>t[2]===cur));fillTones();setTone(st.tone);}).catch(()=>{});
 renderChips();
-["w","light","split","gloss","ao"].forEach(id=>$(id).oninput=req);
+["w","light","split","gloss","ao","refl"].forEach(id=>$(id).oninput=req);
 $("blur").oninput=()=>{st.lightDirty=true;req();};
 function syncAB(){const ab=$("useAB").checked;$("abL").style.display=ab?"flex":"none";$("d12").disabled=ab;}
 $("dist").oninput=$("d12").oninput=()=>{solveGeom();drawOverlay();req();};
