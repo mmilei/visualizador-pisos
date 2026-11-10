@@ -1,0 +1,56 @@
+[
+  {
+    "id": "floor-seed-roble-rustico",
+    "name": "Roble Eslavonia Rústico Gran Formato",
+    "species": "Quercus robur (Roble Eslavonia Europeo)",
+    "plankFormat": "recto",
+    "widthCm": "20.3",
+    "finish": "Poliuretano mate ecológico secado UV con poro abierto",
+    "notes": "Selección rústica con nudos sanos y micro-bisel en los 4 bordes. Ideal para living y dormitorios principales.",
+    "images": [
+      {
+        "id": "seed-img-1",
+        "name": "roble_eslavonia_hd",
+        "dataUrl": "/texturas/roble-eslavonia-hd.jpg",
+        "type": "Primer plano (veta y poro)"
+      }
+    ],
+    "createdAt": 1741580000000
+  },
+  {
+    "id": "floor-seed-chevron-parisien",
+    "name": "Roble Francés Chevron Haussmann",
+    "species": "Roble Europeo Selección Clásica",
+    "plankFormat": "chevron",
+    "widthCm": "10.2",
+    "finish": "Aceite natural vegetal mate sedoso",
+    "notes": "Patrón Chevron francés biselado a 45 grados. Aporta elegancia clásica y sensación de amplitud en pasillos y recepciones.",
+    "images": [
+      {
+        "id": "seed-img-2",
+        "name": "roble_chevron_hd",
+        "dataUrl": "/texturas/roble-chevron-hd.jpg",
+        "type": "Piso colocado / instalado"
+      }
+    ],
+    "createdAt": 1741581000000
+  },
+  {
+    "id": "floor-seed-lapacho-macizo",
+    "name": "Lapacho Guaraní Chocolate Macizo",
+    "species": "Handroanthus heptaphyllus (Lapacho Macizo)",
+    "plankFormat": "recto",
+    "widthCm": "10.2",
+    "finish": "Hidrolaqueado satinado alto tránsito",
+    "notes": "Madera noble de dureza extrema. Tonos castaño chocolate oscuro. Excelente resistencia al tránsito y humedad.",
+    "images": [
+      {
+        "id": "seed-img-3",
+        "name": "lapacho_hd",
+        "dataUrl": "/texturas/lapacho-hd.jpg",
+        "type": "Primer plano (veta y poro)"
+      }
+    ],
+    "createdAt": 1741582000000
+  }
+]

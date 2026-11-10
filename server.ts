@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -8,6 +9,32 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const FLOORS_DB_PATH = path.resolve(__dirname, 'data', 'floors.json');
+
+const readFloorsDb = (): any[] => {
+  try {
+    if (!fs.existsSync(FLOORS_DB_PATH)) {
+      return [];
+    }
+    const raw = fs.readFileSync(FLOORS_DB_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.error('Error reading floors db:', err);
+    return [];
+  }
+};
+
+const writeFloorsDb = (floors: any[]) => {
+  try {
+    const dir = path.dirname(FLOORS_DB_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(FLOORS_DB_PATH, JSON.stringify(floors, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving floors db:', err);
+  }
+};
 
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
@@ -223,6 +250,48 @@ app.get('/api/health', (_req, res) => {
     status: 'ok',
     hasApiKey: !!process.env.GEMINI_API_KEY,
   });
+});
+
+// Floors CRUD endpoints (Persistent JSON Database)
+app.get('/api/floors', (_req, res) => {
+  try {
+    const floors = readFloorsDb();
+    res.json({ success: true, floors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/floors', (req, res) => {
+  try {
+    const newFloor = req.body;
+    if (!newFloor || !newFloor.name) {
+      return res.status(400).json({ error: 'Nombre del piso requerido' });
+    }
+    const floors = readFloorsDb();
+    const existingIdx = floors.findIndex((f: any) => f.id === newFloor.id);
+    if (existingIdx >= 0) {
+      floors[existingIdx] = newFloor;
+    } else {
+      floors.unshift(newFloor);
+    }
+    writeFloorsDb(floors);
+    res.json({ success: true, floor: newFloor, floors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/floors/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    let floors = readFloorsDb();
+    floors = floors.filter((f: any) => f.id !== id);
+    writeFloorsDb(floors);
+    res.json({ success: true, floors });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Serve frontend

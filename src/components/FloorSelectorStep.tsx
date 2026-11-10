@@ -39,17 +39,6 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
           <div className="flex items-center gap-1 p-1 bg-stone-800 rounded-xl border border-stone-700/80">
             <button
               type="button"
-              onClick={() => setActiveTab('catalog')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                activeTab === 'catalog'
-                  ? 'bg-amber-700 text-white shadow-sm font-semibold'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              Catálogo ({CATALOG_PRODUCTS.length})
-            </button>
-            <button
-              type="button"
               onClick={() => setActiveTab('custom')}
               className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'custom'
@@ -58,6 +47,17 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
               }`}
             >
               Mis Pisos Guardados ({customFloors.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('catalog')}
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                activeTab === 'catalog'
+                  ? 'bg-amber-700 text-white shadow-sm font-semibold'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              Catálogo de Muestras ({CATALOG_PRODUCTS.length})
             </button>
           </div>
 

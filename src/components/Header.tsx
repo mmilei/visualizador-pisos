@@ -5,6 +5,7 @@ interface HeaderProps {
   onOpenWorkerModal: () => void;
   onOpenHistoryModal: () => void;
   onOpenQrModal: () => void;
+  onOpenPwaModal: () => void;
   onReset: () => void;
   historyCount: number;
 }
@@ -13,6 +14,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenWorkerModal,
   onOpenHistoryModal,
   onOpenQrModal,
+  onOpenPwaModal,
   onReset,
   historyCount,
 }) => {
@@ -48,10 +50,19 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          onClick={onOpenQrModal}
+          onClick={onOpenPwaModal}
           className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 text-amber-400 font-semibold"
+          title="Cómo agregar al escritorio en iPhone como aplicación nativa"
         >
           <Smartphone className="w-3.5 h-3.5" />
+          <span>App en iPhone</span>
+        </button>
+
+        <button
+          onClick={onOpenQrModal}
+          className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5"
+        >
+          <QrCode className="w-3.5 h-3.5 text-stone-400" />
           <span>QR Celular</span>
         </button>
 

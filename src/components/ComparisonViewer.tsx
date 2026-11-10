@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TransformationResult } from '../types';
-import { Download, Sliders, SplitSquareVertical, Eye, ZoomIn, ZoomOut, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Download, Sliders, SplitSquareVertical, Eye, CheckCircle2, RotateCcw, Maximize2, Minimize2 } from 'lucide-react';
 
 interface ComparisonViewerProps {
   result: TransformationResult;
@@ -17,8 +17,19 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   const [sliderPosition, setSliderPosition] = useState(50);
   const [showOriginalInToggle, setShowOriginalInToggle] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isZoomed, setIsZoomed] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Exit fullscreen on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   // Handle slider drag
   const handleMove = (clientX: number) => {
@@ -49,18 +60,18 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-6">
+    <div className={isFullscreen ? "fixed inset-0 z-50 bg-stone-950/98 p-3 sm:p-5 flex flex-col gap-3 overflow-y-auto backdrop-blur-xl animate-in fade-in duration-150" : "w-full flex flex-col gap-5"}>
       {/* Top action & mode toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-stone-900 border border-stone-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-stone-900 border border-stone-800/80 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <h3 className="text-base font-bold text-stone-100">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <h3 className="text-sm sm:text-base font-bold text-stone-100">
               {result.floorTitle}
             </h3>
           </div>
-          <p className="text-xs text-stone-400 mt-0.5">
-            {result.floorDetails} · Generado con {result.modelUsed}
+          <p className="text-[11px] sm:text-xs text-stone-400 mt-0.5">
+            {result.floorDetails} · {result.modelUsed}
           </p>
         </div>
 
@@ -105,10 +116,21 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             </button>
           </div>
 
+          {/* Fullscreen Button */}
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 active:scale-95 text-xs font-medium text-stone-200 border border-stone-700 flex items-center gap-1.5 transition-all cursor-pointer"
+            title={isFullscreen ? 'Salir de pantalla completa (Esc)' : 'Ver a pantalla completa'}
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5 text-amber-400" /> : <Maximize2 className="w-3.5 h-3.5 text-amber-400" />}
+            <span className="hidden sm:inline">{isFullscreen ? 'Salir' : 'Pantalla Completa'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleDownload}
-            className="px-3.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-medium text-stone-200 border border-stone-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 active:scale-95 text-xs font-medium text-stone-200 border border-stone-700 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-amber-400" />
             <span>Descargar</span>
@@ -117,7 +139,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
       </div>
 
       {/* Main Image Stage */}
-      <div className="relative rounded-2xl border border-stone-800 bg-stone-950 overflow-hidden shadow-2xl">
+      <div className={`relative rounded-2xl border border-stone-800 bg-stone-950 overflow-hidden shadow-2xl ${isFullscreen ? 'flex-1 min-h-[60vh] max-h-[80vh]' : ''}`}>
         {viewMode === 'slider' && (
           <div
             ref={containerRef}
@@ -128,7 +150,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             onTouchStart={() => setIsDragging(true)}
             onTouchEnd={() => setIsDragging(false)}
             onTouchMove={handleTouchMove}
-            className="relative w-full aspect-[4/3] sm:aspect-[16/10] max-h-[640px] select-none cursor-ew-resize overflow-hidden"
+            className={`relative w-full ${isFullscreen ? 'h-full min-h-[60vh]' : 'aspect-[4/3] sm:aspect-[16/10] max-h-[640px]'} select-none cursor-ew-resize overflow-hidden`}
           >
             {/* Background Image: Original Room */}
             <img

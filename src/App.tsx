@@ -8,11 +8,12 @@ import { TestingHistoryModal } from './components/TestingHistoryModal';
 import { MobileQrModal } from './components/MobileQrModal';
 import { AddFloorModal } from './components/AddFloorModal';
 import { PlacementParametersModal } from './components/PlacementParametersModal';
+import { InstallPwaModal } from './components/InstallPwaModal';
 import { CATALOG_PRODUCTS } from './data/catalog';
 import { FloorProduct, CustomFloorData, TransformationResult, PlankOrientation } from './types';
 import { urlToDataUrl } from './utils/imageUtils';
 import { simulateFloorComposite } from './utils/localSimulation';
-import { Sparkles, RefreshCw, AlertCircle, ArrowRight, Play, SlidersHorizontal, Sliders, Tag, ArrowUpDown, ArrowLeftRight } from 'lucide-react';
+import { Sparkles, RefreshCw, AlertCircle, ArrowRight, Play, Sliders, ArrowUpDown, ArrowLeftRight, Smartphone } from 'lucide-react';
 
 function sanitizeError(err: any): string {
   const str = typeof err === 'string' ? err : (err?.message || JSON.stringify(err) || '');
@@ -31,13 +32,31 @@ function sanitizeError(err: any): string {
   return str.replace(/^Error:\s*/, '');
 }
 
+function asProductFromCustom(floor: CustomFloorData): FloorProduct {
+  return {
+    id: floor.id,
+    name: floor.name,
+    species: floor.species || 'Piso personalizado',
+    plankFormat: floor.plankFormat,
+    widthCm: parseFloat(floor.widthCm) || 20,
+    lengthDescription: floor.widthCm ? `Ancho ${floor.widthCm} cm` : 'Formato personalizado',
+    finish: floor.finish || 'Personalizado',
+    textureUrl: floor.images[0]?.dataUrl || '/texturas/roble-eslavonia-hd.jpg',
+    toneHex: '#b5651d',
+    description: floor.notes || 'Piso registrado por el usuario con ficha técnica.',
+    highlightText: `${floor.plankFormat.toUpperCase()} · ${floor.images.length} fotos`,
+    isCustom: true,
+    notes: floor.notes,
+  };
+}
+
 export default function App() {
   const [roomImage, setRoomImage] = useState<string | null>(null);
   const [aspectRatio, setAspectRatio] = useState<string>('4:3');
 
   const [selectedProduct, setSelectedProduct] = useState<FloorProduct | null>(CATALOG_PRODUCTS[0]);
   const [customFloors, setCustomFloors] = useState<CustomFloorData[]>([]);
-  const [activeTab, setActiveTab] = useState<'catalog' | 'custom'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'custom'>('custom');
 
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [plankOrientation, setPlankOrientation] = useState<PlankOrientation>('vertical');
@@ -53,12 +72,32 @@ export default function App() {
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
+  const [isPwaModalOpen, setIsPwaModalOpen] = useState<boolean>(false);
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState<boolean>(false);
   const [isPlacementModalOpen, setIsPlacementModalOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load history and custom floors from localStorage
+  // Load history and custom floors from server database and localStorage
   useEffect(() => {
+    // 1. Fetch from server database
+    fetch('/api/floors')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.floors) && data.floors.length > 0) {
+          setCustomFloors(data.floors);
+          try {
+            localStorage.setItem('vp_custom_floors', JSON.stringify(data.floors));
+          } catch (e) {}
+          // Select first custom floor as default
+          setSelectedProduct(asProductFromCustom(data.floors[0]));
+          setActiveTab('custom');
+          return;
+        }
+      })
+      .catch((e) => {
+        console.warn('Backend /api/floors not reachable, using localStorage fallback');
+      });
+
     try {
       const savedHistory = localStorage.getItem('vp_testing_history');
       if (savedHistory) {
@@ -69,7 +108,11 @@ export default function App() {
       const savedFloors = localStorage.getItem('vp_custom_floors');
       if (savedFloors) {
         const parsed = JSON.parse(savedFloors);
-        if (Array.isArray(parsed)) setCustomFloors(parsed);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCustomFloors(parsed);
+          setSelectedProduct(asProductFromCustom(parsed[0]));
+          setActiveTab('custom');
+        }
       }
     } catch (e) {
       console.warn('Could not load from localStorage', e);
@@ -102,7 +145,7 @@ export default function App() {
   };
 
   const handleSaveCustomFloor = (floor: CustomFloorData) => {
-    const updated = [floor, ...customFloors];
+    const updated = [floor, ...customFloors.filter((f) => f.id !== floor.id)];
     setCustomFloors(updated);
     try {
       localStorage.setItem('vp_custom_floors', JSON.stringify(updated));
@@ -110,22 +153,14 @@ export default function App() {
       console.warn('Could not save custom floor', e);
     }
 
-    const asProduct: FloorProduct = {
-      id: floor.id,
-      name: floor.name,
-      species: floor.species || 'Piso personalizado',
-      plankFormat: floor.plankFormat,
-      widthCm: parseFloat(floor.widthCm) || 20,
-      lengthDescription: floor.widthCm ? `Ancho ${floor.widthCm} cm` : 'Formato personalizado',
-      finish: floor.finish || 'Personalizado',
-      textureUrl: floor.images[0]?.dataUrl || '/texturas/roble-eslavonia-hd.jpg',
-      toneHex: '#b5651d',
-      description: floor.notes || 'Piso registrado por el usuario con ficha técnica.',
-      highlightText: `${floor.plankFormat.toUpperCase()} · ${floor.images.length} fotos`,
-      isCustom: true,
-      notes: floor.notes,
-    };
+    // Persist to server database
+    fetch('/api/floors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(floor),
+    }).catch((err) => console.warn('Could not persist floor to server:', err));
 
+    const asProduct = asProductFromCustom(floor);
     setSelectedProduct(asProduct);
     setActiveTab('custom');
     if (floor.notes) {
@@ -140,9 +175,18 @@ export default function App() {
     try {
       localStorage.setItem('vp_custom_floors', JSON.stringify(updated));
     } catch (e) {}
+
+    // Delete from server database
+    fetch(`/api/floors/${id}`, { method: 'DELETE' }).catch((e) => {});
+
     if (selectedProduct?.id === id) {
-      setSelectedProduct(CATALOG_PRODUCTS[0]);
-      setActiveTab('catalog');
+      if (updated.length > 0) {
+        setSelectedProduct(asProductFromCustom(updated[0]));
+        setActiveTab('custom');
+      } else {
+        setSelectedProduct(CATALOG_PRODUCTS[0]);
+        setActiveTab('catalog');
+      }
     }
   };
 
@@ -307,6 +351,7 @@ export default function App() {
         onOpenWorkerModal={() => setIsWorkerModalOpen(true)}
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
         onOpenQrModal={() => setIsQrModalOpen(true)}
+        onOpenPwaModal={() => setIsPwaModalOpen(true)}
         onReset={handleResetAll}
         historyCount={history.length}
       />
@@ -323,16 +368,31 @@ export default function App() {
           /* Workflow: Capture Room + Choose Floor */
           <div className="flex flex-col gap-8">
             {/* Hero Kicker */}
-            <div className="flex flex-col gap-1.5 max-w-2xl">
-              <span className="text-xs font-semibold text-amber-500 tracking-wider uppercase">
-                Visualizador de Pisos · Ficha Técnica & Ensayos
-              </span>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-100">
-                Visualiza el piso de madera en tu propio ambiente
-              </h1>
-              <p className="text-xs sm:text-sm text-stone-400 leading-relaxed">
-                Toma una foto de tu espacio, elige un piso de catálogo o registra una ficha con las medidas exactas de tabla, fotos y prompt de colocación.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-stone-800/80 pb-5">
+              <div className="flex flex-col gap-1.5 max-w-2xl">
+                <div className="flex items-center gap-2 text-xs font-medium text-stone-400">
+                  <span className="text-amber-500 font-semibold">Visualizador Arquitectónico</span>
+                  <span aria-hidden="true" className="text-stone-600">·</span>
+                  <span>Fichas Técnicas & Ensayos Fotorrealistas</span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-100">
+                  Visualiza el piso de madera en tu propio espacio
+                </h1>
+                <p className="text-xs sm:text-sm text-stone-400 leading-relaxed max-w-xl">
+                  Fotografía tu ambiente, selecciona una madera de tus pisos guardados y evalúa la dirección de tablas y tonalidad con luz natural.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsPwaModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 hover:text-stone-100 text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Instalar en iPhone</span>
+                </button>
+              </div>
             </div>
 
             {/* Error banner if any */}
@@ -502,7 +562,7 @@ export default function App() {
             <div className="sticky bottom-4 z-20 pt-4">
               <div className="p-3 sm:p-4 rounded-2xl bg-stone-900/95 backdrop-blur-md border border-stone-700/80 shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-3 text-xs text-stone-300">
-                  <div className="w-3 h-3 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
                   <div>
                     <span className="font-semibold text-stone-100">
                       Piso: {selectedProduct?.name} ({customWidthCm || selectedProduct?.widthCm} cm · {plankOrientation.toUpperCase()})
@@ -608,6 +668,12 @@ export default function App() {
       <MobileQrModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}
+      />
+
+      {/* iPhone PWA Install Modal */}
+      <InstallPwaModal
+        isOpen={isPwaModalOpen}
+        onClose={() => setIsPwaModalOpen(false)}
       />
     </div>
   );
