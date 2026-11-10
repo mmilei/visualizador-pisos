@@ -1,0 +1,6 @@
+{
+  "name": "Visualizador de Pisos con IA",
+  "description": "Visualiza pisos de madera reales en tu propio ambiente mediante inteligencia artificial generativa y preservación fotográfica.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
