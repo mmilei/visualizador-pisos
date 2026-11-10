@@ -1,0 +1,21 @@
+{
+  "name": "Visualizador de Pisos",
+  "short_name": "Pisos IA",
+  "description": "Visualizador fotorrealista de pisos de madera con IA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0c0a09",
+  "theme_color": "#1c1917",
+  "icons": [
+    {
+      "src": "/texturas/roble-eslavonia-hd.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/texturas/roble-eslavonia-hd.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
