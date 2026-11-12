@@ -11,17 +11,49 @@ export const CloudflareWorkerModal: React.FC<CloudflareWorkerModalProps> = ({
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [workerUrl, setWorkerUrl] = useState(() => {
+    try {
+      return localStorage.getItem('vp_custom_worker_url') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   if (!isOpen) return null;
 
+  const handleSaveWorkerUrl = () => {
+    try {
+      const cleanUrl = workerUrl.trim();
+      if (cleanUrl) {
+        localStorage.setItem('vp_custom_worker_url', cleanUrl);
+      } else {
+        localStorage.removeItem('vp_custom_worker_url');
+      }
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (e) {
+      console.warn('Error saving worker url:', e);
+    }
+  };
+
+  const handleClearWorkerUrl = () => {
+    setWorkerUrl('');
+    try {
+      localStorage.removeItem('vp_custom_worker_url');
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2000);
+    } catch {}
+  };
+
   const workerCode = `/**
  * Cloudflare Worker Proxy para Visualizador de Pisos (GitHub Pages)
- * Recibe la foto del ambiente y las referencias del piso, llama a Gemini Flash
+ * Recibe la foto del ambiente y las referencias del piso, llama a Gemini Flash / Nano Banana
  * de forma segura protegiendo la GEMINI_API_KEY en variables de entorno de Cloudflare.
  */
 export default {
   async fetch(request, env) {
-    // Manejo de CORS para GitHub Pages
+    // Manejo de CORS para GitHub Pages y apps móviles
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -37,7 +69,7 @@ export default {
     }
 
     try {
-      const { roomImage, floorImages, productName, aspectRatio } = await request.json();
+      const { roomImage, floorImages, productName, aspectRatio, plankOrientation, woodDetails } = await request.json();
 
       if (!roomImage || !floorImages || floorImages.length === 0) {
         return new Response(JSON.stringify({ error: "Faltan imágenes requeridas" }), {
@@ -46,7 +78,7 @@ export default {
         });
       }
 
-      // Preparar partes para Gemini API
+      // Preparar partes multimodales para Gemini API
       const parts = [
         {
           inlineData: {
@@ -66,7 +98,7 @@ export default {
       }
 
       parts.push({
-        text: \`You are an architectural visualization engine. The first image is a room. The following image(s) show a wood floor product "\${productName || 'wood floor'}". Replace ONLY the floor of image 1 with this wood floor. Maintain exact furniture, walls, windows and camera angle. Add soft contact shadows beneath furniture and natural window reflections.\`,
+        text: \`You are an architectural visualization engine. The first image is a room. The following image(s) show a wood floor product "\${productName || 'wood floor'}". Replace ONLY the floor surface of image 1 with this wood floor. Maintain exact furniture, walls, windows and camera angle. Lay the planks strictly with \${plankOrientation || 'vertical'} orientation. Add soft contact shadows beneath furniture and natural window sheen.\`,
       });
 
       const response = await fetch(
@@ -84,11 +116,20 @@ export default {
       );
 
       const data = await response.json();
+      const inlineData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+      if (inlineData?.data) {
+        const mime = inlineData.mimeType || 'image/png';
+        return new Response(JSON.stringify({
+          success: true,
+          imageUrl: \`data:\${mime};base64,\${inlineData.data}\`,
+          model: 'gemini-3.1-flash-lite-image'
+        }), {
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
+
       return new Response(JSON.stringify(data), {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-        },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     } catch (err) {
       return new Response(JSON.stringify({ error: err.message }), {
@@ -113,7 +154,7 @@ export default {
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-amber-500" />
             <h3 className="text-base font-bold text-stone-100">
-              Cloudflare Worker Proxy (para GitHub Pages)
+              Conexión a Worker / Proxy Seguro (GitHub Pages)
             </h3>
           </div>
           <button
@@ -126,6 +167,42 @@ export default {
 
         {/* Content */}
         <div className="p-5 overflow-y-auto space-y-4 text-xs text-stone-300 leading-relaxed">
+          {/* Worker URL input */}
+          <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 space-y-2.5">
+            <label className="block text-xs font-semibold text-amber-200">
+              ¿Ya creaste tu Worker en Cloudflare? Pega su URL aquí:
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={workerUrl}
+                onChange={(e) => setWorkerUrl(e.target.value)}
+                placeholder="https://visualizador-proxy.tu-usuario.workers.dev"
+                className="flex-1 px-3 py-2 rounded-lg bg-stone-950 border border-stone-700 text-stone-100 placeholder:text-stone-500 text-xs focus:outline-none focus:border-amber-500 font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleSaveWorkerUrl}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-semibold text-xs transition-colors shrink-0 cursor-pointer"
+              >
+                {savedSuccess ? '¡Guardado!' : 'Guardar'}
+              </button>
+              {workerUrl && (
+                <button
+                  type="button"
+                  onClick={handleClearWorkerUrl}
+                  className="px-3 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-stone-200 text-xs transition-colors shrink-0 cursor-pointer"
+                  title="Quitar Worker y volver al modo automático"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-stone-400 leading-normal">
+              Si no configuras un Worker, la aplicación utiliza automáticamente el <strong>motor de simulación fotográfica local</strong> en el navegador sin costo y sin requerir ninguna API Key.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 rounded-xl bg-stone-950 border border-stone-800 flex items-start gap-2.5">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -142,7 +219,7 @@ export default {
               <div>
                 <span className="font-semibold text-stone-200 block">Costo Estimado</span>
                 <span className="text-[11px] text-stone-400">
-                  Aproximadamente <strong className="text-stone-200">USD 0.03 a 0.05</strong> por imagen generada en Gemini Flash Image. Cloudflare Workers incluye 100.000 req/día gratis.
+                  Aproximadamente <strong className="text-stone-200">USD 0.03</strong> por imagen en Gemini Imagen/Nano Banana. Cloudflare Workers incluye 100.000 peticiones/día gratis.
                 </span>
               </div>
             </div>
@@ -151,7 +228,7 @@ export default {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="font-semibold text-stone-200">
-                Código del Worker (<code className="text-amber-400">worker.js</code>):
+                Código para tu Cloudflare Worker (<code className="text-amber-400">worker.js</code>):
               </span>
               <button
                 type="button"
@@ -163,7 +240,7 @@ export default {
               </button>
             </div>
 
-            <pre className="p-3.5 rounded-xl bg-stone-950 border border-stone-800 font-mono text-[11px] text-stone-300 overflow-x-auto max-h-[260px] leading-snug">
+            <pre className="p-3.5 rounded-xl bg-stone-950 border border-stone-800 font-mono text-[11px] text-stone-300 overflow-x-auto max-h-[200px] leading-snug">
               {workerCode}
             </pre>
           </div>
@@ -174,7 +251,7 @@ export default {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium transition-colors"
+            className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium transition-colors cursor-pointer"
           >
             Cerrar
           </button>

@@ -234,50 +234,89 @@ export default function App() {
         floorImageLabels = ['Muestra fotográfica HD de catálogo'];
       }
 
-      setGenerationStep(`Procesando con IA multimodal (${floorImages.length} foto${floorImages.length !== 1 ? 's' : ''} de referencia)...`);
+      let customWorkerUrl = '';
+      try {
+        customWorkerUrl = localStorage.getItem('vp_custom_worker_url') || '';
+      } catch {}
 
-      const response = await fetch('/api/generate-floor', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomImage,
-          floorImages,
-          floorImageLabels,
-          productName: floorTitle,
-          woodDetails: {
-            ...woodDetails,
-            widthCm: customWidthCm || woodDetails.widthCm,
-            finish: finishPreference || woodDetails.finish,
+      const targetEndpoint = customWorkerUrl || '/api/generate-floor';
+      let successData: any = null;
+
+      try {
+        const response = await fetch(targetEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-          customPrompt: customPrompt.trim(),
-          plankOrientation,
-          aspectRatio,
-        }),
-      });
+          body: JSON.stringify({
+            roomImage,
+            floorImages,
+            floorImageLabels,
+            productName: floorTitle,
+            woodDetails: {
+              ...woodDetails,
+              widthCm: customWidthCm || woodDetails.widthCm,
+              finish: finishPreference || woodDetails.finish,
+            },
+            customPrompt: customPrompt.trim(),
+            plankOrientation,
+            aspectRatio,
+          }),
+        });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Ocurrió un error al generar la imagen con el piso.');
+        if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await response.json();
+            if (data && data.success && data.imageUrl) {
+              successData = data;
+            }
+          }
+        }
+      } catch (networkErr) {
+        console.warn('Backend or Worker not reachable, falling back to local simulation:', networkErr);
       }
 
-      setGenerationStep('Finalizando detalles fotorrealistas...');
+      if (successData) {
+        setGenerationStep('Finalizando detalles fotorrealistas...');
+        const newResult: TransformationResult = {
+          id: `res-${Date.now()}`,
+          timestamp: Date.now(),
+          roomImageUrl: roomImage,
+          resultImageUrl: successData.imageUrl,
+          floorTitle,
+          floorDetails,
+          referenceImages: floorImages,
+          modelUsed: successData.model || (customWorkerUrl ? 'Cloudflare Worker (Gemini Nano Banana)' : 'gemini-3.1-flash-lite-image'),
+        };
 
-      const newResult: TransformationResult = {
-        id: `res-${Date.now()}`,
-        timestamp: Date.now(),
-        roomImageUrl: roomImage,
-        resultImageUrl: data.imageUrl,
-        floorTitle,
-        floorDetails,
-        referenceImages: floorImages,
-        modelUsed: data.model || 'gemini-3.1-flash-lite-image',
-      };
+        setCurrentResult(newResult);
+        saveToHistory(newResult);
+      } else {
+        // Fallback transparente: en GitHub Pages funciona "de una" con el motor local en el navegador
+        setGenerationStep('Generando simulación en el navegador (motor local)...');
+        const texture = selectedProduct.textureUrl || floorImages[0];
+        const simUrl = await simulateFloorComposite(roomImage, texture, {
+          speciesName: selectedProduct.name,
+          toneHex: selectedProduct.toneHex || '#c4965e',
+          pattern: selectedProduct.plankFormat,
+          orientation: plankOrientation,
+        });
 
-      setCurrentResult(newResult);
-      saveToHistory(newResult);
+        const newResult: TransformationResult = {
+          id: `sim-${Date.now()}`,
+          timestamp: Date.now(),
+          roomImageUrl: roomImage,
+          resultImageUrl: simUrl,
+          floorTitle: `${selectedProduct.name} (Simulación Local)`,
+          floorDetails: `Ancho ${customWidthCm || selectedProduct.widthCm} cm · ${selectedProduct.species} · ${plankOrientation.toUpperCase()}`,
+          referenceImages: floorImages,
+          modelUsed: 'Canvas Lighting Engine (In-Browser)',
+        };
+
+        setCurrentResult(newResult);
+        saveToHistory(newResult);
+      }
     } catch (err: any) {
       console.error('Error transforming floor:', err);
       setErrorMessage(sanitizeError(err));
