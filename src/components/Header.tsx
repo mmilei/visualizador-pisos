@@ -1,22 +1,24 @@
 import React from 'react';
-import { Camera, Code, History, Smartphone, QrCode, Download, Github } from 'lucide-react';
+import { Camera, Key, History, Smartphone, QrCode, Download, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
-  onOpenWorkerModal: () => void;
+  onOpenKeyModal: () => void;
   onOpenHistoryModal: () => void;
   onOpenQrModal: () => void;
   onOpenPwaModal: () => void;
   onReset: () => void;
   historyCount: number;
+  hasApiKey: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onOpenWorkerModal,
+  onOpenKeyModal,
   onOpenHistoryModal,
   onOpenQrModal,
   onOpenPwaModal,
   onReset,
   historyCount,
+  hasApiKey,
 }) => {
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 sm:px-8 py-3 bg-stone-900/90 backdrop-blur-md border-b border-stone-800 text-stone-100">
@@ -30,11 +32,14 @@ export const Header: React.FC<HeaderProps> = ({
           VP
         </span>
         <div className="flex flex-col">
-          <span className="text-base font-bold tracking-tight text-stone-100 whitespace-nowrap shrink-0">
+          <span className="text-base font-bold tracking-tight text-stone-100 whitespace-nowrap shrink-0 flex items-center gap-1.5">
             Visualizador de Pisos
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+              Nano Banana AI
+            </span>
           </span>
           <span className="text-[11px] text-stone-400 font-medium tracking-wide">
-            Modo Foto IA Multimodal
+            Inteligencia Artificial Multimodal
           </span>
         </div>
       </button>
@@ -75,11 +80,16 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
-          onClick={onOpenWorkerModal}
-          className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5"
+          onClick={onOpenKeyModal}
+          className={`px-2.5 py-1 rounded-lg border transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 font-semibold ${
+            hasApiKey
+              ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/50'
+              : 'bg-amber-950/40 border-amber-700/50 text-amber-300 hover:bg-amber-900/50'
+          }`}
+          title="Configurar clave de Gemini Nano Banana para GitHub Pages"
         >
-          <Code className="w-3.5 h-3.5 text-stone-400" />
-          <span>Cloudflare Proxy</span>
+          <Key className="w-3.5 h-3.5" />
+          <span>{hasApiKey ? 'IA Conectada' : 'Conectar Clave IA'}</span>
         </button>
       </nav>
 

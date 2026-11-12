@@ -3,7 +3,7 @@ import { Header } from './components/Header';
 import { RoomCaptureStep } from './components/RoomCaptureStep';
 import { FloorSelectorStep } from './components/FloorSelectorStep';
 import { ComparisonViewer } from './components/ComparisonViewer';
-import { CloudflareWorkerModal } from './components/CloudflareWorkerModal';
+import { ApiKeyModal } from './components/ApiKeyModal';
 import { TestingHistoryModal } from './components/TestingHistoryModal';
 import { MobileQrModal } from './components/MobileQrModal';
 import { AddFloorModal } from './components/AddFloorModal';
@@ -12,13 +12,13 @@ import { InstallPwaModal } from './components/InstallPwaModal';
 import { CATALOG_PRODUCTS } from './data/catalog';
 import { FloorProduct, CustomFloorData, TransformationResult, PlankOrientation } from './types';
 import { urlToDataUrl } from './utils/imageUtils';
-import { simulateFloorComposite } from './utils/localSimulation';
-import { Sparkles, RefreshCw, AlertCircle, ArrowRight, Play, Sliders, ArrowUpDown, ArrowLeftRight, Smartphone } from 'lucide-react';
+import { generateWithGoogleNanoBanana } from './utils/geminiDirect';
+import { Sparkles, RefreshCw, AlertCircle, ArrowRight, Sliders, ArrowUpDown, ArrowLeftRight, Smartphone, Key } from 'lucide-react';
 
 function sanitizeError(err: any): string {
   const str = typeof err === 'string' ? err : (err?.message || JSON.stringify(err) || '');
   if (str.includes('429') || str.includes('RESOURCE_EXHAUSTED') || str.includes('quota') || str.includes('limit exceeded')) {
-    return 'Límite de cuota alcanzado en la API de Gemini Imagen. Los modelos de generación fotorrealista requieren asociar facturación activa (Pay-as-you-go) en Google AI Studio (~$0.03 por imagen). Para ensayar inmediatamente tu ambiente sin costo, pulsa "Probar Simulación Local".';
+    return 'Límite de cuota o saldo alcanzado en la API de Google Gemini Imagen. Los modelos fotorrealistas Nano Banana requieren asociar facturación activa (Pay-as-you-go) en Google AI Studio (~$0.03 por imagen).';
   }
   try {
     const parsed = JSON.parse(str);
@@ -69,7 +69,15 @@ export default function App() {
   const [currentResult, setCurrentResult] = useState<TransformationResult | null>(null);
   const [history, setHistory] = useState<TransformationResult[]>([]);
 
-  const [isWorkerModalOpen, setIsWorkerModalOpen] = useState<boolean>(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('vp_gemini_api_key') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
   const [isPwaModalOpen, setIsPwaModalOpen] = useState<boolean>(false);
@@ -77,8 +85,31 @@ export default function App() {
   const [isPlacementModalOpen, setIsPlacementModalOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load history and custom floors from server database and localStorage
+  // Load history, custom floors, and check URL for API key (?key=... o ?apiKey=...)
   useEffect(() => {
+    // 0. Check for API key in URL query parameter
+    try {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const keyFromUrl = urlParams.get('key') || urlParams.get('apiKey');
+        if (keyFromUrl && keyFromUrl.trim()) {
+          const cleanKey = keyFromUrl.trim();
+          setGeminiApiKey(cleanKey);
+          localStorage.setItem('vp_gemini_api_key', cleanKey);
+          urlParams.delete('key');
+          urlParams.delete('apiKey');
+          const remainingQuery = urlParams.toString();
+          const cleanUrl =
+            window.location.pathname +
+            (remainingQuery ? `?${remainingQuery}` : '') +
+            window.location.hash;
+          window.history.replaceState({}, '', cleanUrl);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not parse key from URL query:', e);
+    }
+
     // 1. Fetch from server database
     fetch('/api/floors')
       .then((res) => res.json())
@@ -234,16 +265,11 @@ export default function App() {
         floorImageLabels = ['Muestra fotográfica HD de catálogo'];
       }
 
-      let customWorkerUrl = '';
-      try {
-        customWorkerUrl = localStorage.getItem('vp_custom_worker_url') || '';
-      } catch {}
+      let generatedResult: { imageUrl: string; model: string } | null = null;
 
-      const targetEndpoint = customWorkerUrl || '/api/generate-floor';
-      let successData: any = null;
-
+      // 1. Intentar con el backend del servidor si está disponible
       try {
-        const response = await fetch(targetEndpoint, {
+        const response = await fetch('/api/generate-floor', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -269,104 +295,62 @@ export default function App() {
           if (contentType.includes('application/json')) {
             const data = await response.json();
             if (data && data.success && data.imageUrl) {
-              successData = data;
+              generatedResult = data;
             }
           }
         }
-      } catch (networkErr) {
-        console.warn('Backend or Worker not reachable, falling back to local simulation:', networkErr);
+      } catch (backendErr) {
+        console.warn('Backend server not reachable, attempting direct Google Nano Banana API call:', backendErr);
       }
 
-      if (successData) {
-        setGenerationStep('Finalizando detalles fotorrealistas...');
-        const newResult: TransformationResult = {
-          id: `res-${Date.now()}`,
-          timestamp: Date.now(),
-          roomImageUrl: roomImage,
-          resultImageUrl: successData.imageUrl,
-          floorTitle,
-          floorDetails,
-          referenceImages: floorImages,
-          modelUsed: successData.model || (customWorkerUrl ? 'Cloudflare Worker (Gemini Nano Banana)' : 'gemini-3.1-flash-lite-image'),
-        };
+      // 2. Si no hay backend (ej: en GitHub Pages), llamar directamente a Google Gemini Nano Banana
+      if (!generatedResult) {
+        const activeKey =
+          geminiApiKey ||
+          (typeof window !== 'undefined' ? localStorage.getItem('vp_gemini_api_key') || '' : '');
 
-        setCurrentResult(newResult);
-        saveToHistory(newResult);
-      } else {
-        // Fallback transparente: en GitHub Pages funciona "de una" con el motor local en el navegador
-        setGenerationStep('Generando simulación en el navegador (motor local)...');
-        const texture = selectedProduct.textureUrl || floorImages[0];
-        const simUrl = await simulateFloorComposite(roomImage, texture, {
-          speciesName: selectedProduct.name,
-          toneHex: selectedProduct.toneHex || '#c4965e',
-          pattern: selectedProduct.plankFormat,
-          orientation: plankOrientation,
+        if (!activeKey) {
+          setIsKeyModalOpen(true);
+          throw new Error(
+            'Para generar con Google Nano Banana en GitHub Pages, ingresa tu Gemini API Key tocando "Conectar Clave IA" o comparte el link con ?key=...'
+          );
+        }
+
+        setGenerationStep('Generando con IA fotorrealista (Google Gemini Nano Banana)...');
+        generatedResult = await generateWithGoogleNanoBanana({
+          apiKey: activeKey,
+          roomImage,
+          floorImages,
+          floorImageLabels,
+          productName: floorTitle,
+          woodDetails: {
+            ...woodDetails,
+            widthCm: customWidthCm || woodDetails.widthCm,
+            finish: finishPreference || woodDetails.finish,
+          },
+          customPrompt: customPrompt.trim(),
+          plankOrientation,
+          aspectRatio,
         });
-
-        const newResult: TransformationResult = {
-          id: `sim-${Date.now()}`,
-          timestamp: Date.now(),
-          roomImageUrl: roomImage,
-          resultImageUrl: simUrl,
-          floorTitle: `${selectedProduct.name} (Simulación Local)`,
-          floorDetails: `Ancho ${customWidthCm || selectedProduct.widthCm} cm · ${selectedProduct.species} · ${plankOrientation.toUpperCase()}`,
-          referenceImages: floorImages,
-          modelUsed: 'Canvas Lighting Engine (In-Browser)',
-        };
-
-        setCurrentResult(newResult);
-        saveToHistory(newResult);
       }
-    } catch (err: any) {
-      console.error('Error transforming floor:', err);
-      setErrorMessage(sanitizeError(err));
-    } finally {
-      setIsGenerating(false);
-      setGenerationStep('');
-    }
-  };
 
-  const handleRunLocalSimulation = async () => {
-    if (!roomImage) {
-      setErrorMessage('Por favor toma o sube primero una foto de tu ambiente.');
-      return;
-    }
-
-    if (!selectedProduct) {
-      setErrorMessage('Selecciona un piso del catálogo o registra una ficha de piso.');
-      return;
-    }
-
-    try {
-      setIsGenerating(true);
-      setErrorMessage(null);
-      setGenerationStep('Generando simulación lumínica local sin consumir créditos...');
-
-      const texture = selectedProduct.textureUrl;
-
-      const simUrl = await simulateFloorComposite(roomImage, texture, {
-        speciesName: selectedProduct.name,
-        toneHex: selectedProduct.toneHex || '#c4965e',
-        pattern: selectedProduct.plankFormat,
-        orientation: plankOrientation,
-      });
-
+      setGenerationStep('Finalizando detalles fotorrealistas...');
       const newResult: TransformationResult = {
-        id: `sim-${Date.now()}`,
+        id: `res-${Date.now()}`,
         timestamp: Date.now(),
         roomImageUrl: roomImage,
-        resultImageUrl: simUrl,
-        floorTitle: `${selectedProduct.name} (Simulación Local)`,
-        floorDetails: `Ancho ${selectedProduct.widthCm} cm · ${selectedProduct.species} · ${plankOrientation.toUpperCase()}`,
-        referenceImages: [texture],
-        modelUsed: 'Canvas Lighting Engine (Offline)',
+        resultImageUrl: generatedResult.imageUrl,
+        floorTitle,
+        floorDetails,
+        referenceImages: floorImages,
+        modelUsed: generatedResult.model || 'gemini-nano-banana-2.1',
       };
 
       setCurrentResult(newResult);
       saveToHistory(newResult);
     } catch (err: any) {
-      console.error(err);
-      setErrorMessage('No se pudo generar la simulación local: ' + err.message);
+      console.error('Error transforming floor:', err);
+      setErrorMessage(sanitizeError(err));
     } finally {
       setIsGenerating(false);
       setGenerationStep('');
@@ -387,12 +371,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
       <Header
-        onOpenWorkerModal={() => setIsWorkerModalOpen(true)}
+        onOpenKeyModal={() => setIsKeyModalOpen(true)}
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
         onOpenQrModal={() => setIsQrModalOpen(true)}
         onOpenPwaModal={() => setIsPwaModalOpen(true)}
         onReset={handleResetAll}
         historyCount={history.length}
+        hasApiKey={!!geminiApiKey}
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6">
@@ -445,16 +430,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {roomImage && (
-                  <button
-                    type="button"
-                    onClick={handleRunLocalSimulation}
-                    className="self-start sm:self-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>Probar Simulación Local (Sin Créditos)</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsKeyModalOpen(true)}
+                  className="self-start sm:self-auto px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Configurar Clave Gemini (Nano Banana)</span>
+                </button>
               </div>
             )}
 
@@ -624,19 +607,7 @@ export default function App() {
                     <span>Parametrizar Colocación</span>
                   </button>
 
-                  {/* Botón Simulación Inmediata (Local) */}
-                  <button
-                    type="button"
-                    disabled={!roomImage || isGenerating}
-                    onClick={handleRunLocalSimulation}
-                    className="flex-1 sm:flex-none min-h-[46px] px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 active:scale-[0.98] disabled:opacity-40 text-stone-300 text-xs font-medium border border-stone-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    title="Prueba inmediata en el navegador sin gastar créditos"
-                  >
-                    <Play className="w-3.5 h-3.5 text-stone-400" />
-                    <span>Simulación Inmediata</span>
-                  </button>
-
-                  {/* Botón 1: 1 Clic Transformación */}
+                  {/* Botón 1: 1 Clic Transformación con Google Nano Banana */}
                   <button
                     type="button"
                     disabled={!roomImage || isGenerating || !selectedProduct}
@@ -646,12 +617,12 @@ export default function App() {
                     {isGenerating ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                        <span>{generationStep || 'Generando piso con IA...'}</span>
+                        <span>{generationStep || 'Generando con Google Nano Banana...'}</span>
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4 text-amber-200" />
-                        <span>Transformar Piso (1 Clic)</span>
+                        <span>Transformar con IA (Nano Banana)</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}
@@ -685,10 +656,19 @@ export default function App() {
         onApplyAndRun={handleTransformFloor}
       />
 
-      {/* Cloudflare Worker Code Modal */}
-      <CloudflareWorkerModal
-        isOpen={isWorkerModalOpen}
-        onClose={() => setIsWorkerModalOpen(false)}
+      {/* Gemini Nano Banana API Key Modal */}
+      <ApiKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        apiKey={geminiApiKey}
+        onSaveApiKey={(key) => {
+          setGeminiApiKey(key);
+          if (key) {
+            localStorage.setItem('vp_gemini_api_key', key);
+          } else {
+            localStorage.removeItem('vp_gemini_api_key');
+          }
+        }}
       />
 
       {/* Testing History Modal */}
