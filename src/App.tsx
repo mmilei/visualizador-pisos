@@ -453,10 +453,7 @@ export default function App() {
       const initialAssistantMessage: ChatRefinementMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        text:
-          activeParamCount === 0
-            ? `Primera versión generada con "${floorTitle}" aplicando la muestra natural sin restricciones extra. ¿Querés corregir dirección, tono, ancho de tabla o brillo?`
-            : `Primera versión generada con "${floorTitle}" (${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''}). Decime qué querés ajustar sobre esta imagen.`,
+        text: `Listo, así quedó "${floorTitle}". ¿Así está bien o querés cambiar algo? Podés pedir cambios de dirección, ancho de tabla, tono o brillo directo por acá.`,
         imageUrl: generatedResult.imageUrl,
         modelUsed,
         versionNumber: 1,
@@ -479,6 +476,9 @@ export default function App() {
 
       setCurrentResult(newResult);
       saveToHistory(newResult);
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } catch (err: any) {
       console.error('Error transforming floor:', err);
       setErrorMessage(sanitizeError(err));
