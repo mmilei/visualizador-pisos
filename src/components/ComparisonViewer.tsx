@@ -64,7 +64,8 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   const [isApproved, setIsApproved] = useState(false);
 
   const [chatInput, setChatInput] = useState('');
-  const [includeReference, setIncludeReference] = useState(true);
+  // Off by default: avoids sending a second room photo when editing direction/tone/width/matte on the active render
+  const [includeReference, setIncludeReference] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -135,7 +136,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
     link.click();
   };
 
-  const handleSendInstruction = async (textToSend?: string) => {
+  const handleSendInstruction = async (textToSend?: string, forceIncludeRef?: boolean) => {
     const clean = (textToSend ?? chatInput).trim();
     if (!clean || isRefining) return;
     if (!textToSend) setChatInput('');
@@ -144,7 +145,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
     await onRefineResult({
       baseImageUrl: result.resultImageUrl,
       instruction: clean,
-      includeReference,
+      includeReference: forceIncludeRef ?? includeReference,
     });
   };
 
@@ -547,7 +548,12 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                   key={q}
                   type="button"
                   disabled={isRefining}
-                  onClick={() => handleSendInstruction(q)}
+                  onClick={() =>
+                    handleSendInstruction(
+                      q,
+                      q.toLowerCase().includes('foto muestra') ? true : undefined
+                    )
+                  }
                   className="min-h-[34px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-40 text-stone-300 text-[11px] whitespace-nowrap shrink-0 transition-colors cursor-pointer"
                 >
                   {q}
@@ -565,7 +571,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                     onChange={(e) => setIncludeReference(e.target.checked)}
                     className="accent-amber-600 rounded"
                   />
-                  <span>Incluir muestra original del piso en la corrección</span>
+                  <span>Re-enviar también la muestra del piso (solo si querés copiar más su textura)</span>
                 </label>
               )}
 

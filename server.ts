@@ -99,9 +99,12 @@ app.post('/api/generate-floor', async (req, res) => {
 
     const ai = getAiClient();
 
-    // Prepare room image part
+    // Prepare room image part with explicit role label
     const roomParsed = parseDataUrl(roomImage);
     const parts: any[] = [
+      {
+        text: 'TARGET ROOM IMAGE TO KEEP (preserve this exact room, furniture, walls, rugs, lighting, and camera angle; replace ONLY the floor):',
+      },
       {
         inlineData: {
           mimeType: roomParsed.mimeType,
@@ -110,23 +113,26 @@ app.post('/api/generate-floor', async (req, res) => {
       },
     ];
 
-    // Prepare floor reference parts
+    // Prepare floor reference parts with explicit material-only labels
     const referenceLabels: string[] = [];
     for (let i = 0; i < floorImages.length; i++) {
       const floorImg = floorImages[i];
       if (typeof floorImg === 'string' && floorImg.length > 0) {
         const parsed = parseDataUrl(floorImg);
+        const label =
+          Array.isArray(floorImageLabels) && floorImageLabels[i]
+            ? floorImageLabels[i]
+            : `Sample #${i + 1}`;
+        referenceLabels.push(label);
+        parts.push({
+          text: `FLOOR MATERIAL REFERENCE ONLY (${label} — ignore any furniture, mirrors, or walls in this photo; extract ONLY the wood floor color, grain, and planks):`,
+        });
         parts.push({
           inlineData: {
             mimeType: parsed.mimeType,
             data: parsed.data,
           },
         });
-        const label =
-          Array.isArray(floorImageLabels) && floorImageLabels[i]
-            ? floorImageLabels[i]
-            : `Sample #${i + 1}`;
-        referenceLabels.push(label);
       }
     }
 
@@ -253,6 +259,9 @@ app.post('/api/refine-floor', async (req, res) => {
     const baseParsed = parseDataUrl(baseImageUrl);
     const parts: any[] = [
       {
+        text: 'TARGET ROOM IMAGE TO EDIT (keep this exact room, furniture, bed, rug, walls, and camera angle; modify ONLY the floor as requested):',
+      },
+      {
         inlineData: {
           mimeType: baseParsed.mimeType,
           data: baseParsed.data,
@@ -262,6 +271,9 @@ app.post('/api/refine-floor', async (req, res) => {
 
     if (referenceImageUrl && typeof referenceImageUrl === 'string') {
       const refParsed = parseDataUrl(referenceImageUrl);
+      parts.push({
+        text: 'FLOOR MATERIAL REFERENCE ONLY (NEVER output this room or its furniture/mirrors; use only as wood texture/color reference):',
+      });
       parts.push({
         inlineData: {
           mimeType: refParsed.mimeType,
@@ -275,10 +287,12 @@ app.post('/api/refine-floor', async (req, res) => {
       : [];
 
     const promptText = [
-      `Edit image 1 (the current room render) following this correction: "${String(instruction).trim()}".`,
-      referenceImageUrl ? 'Image 2 is the original wood floor reference sample for grain/tone consistency if needed.' : '',
+      `Edit ONLY the TARGET ROOM IMAGE (first image) following this user correction: "${String(instruction).trim()}".`,
+      referenceImageUrl
+        ? 'The second image is ONLY a wood floor material swatch for grain/color consistency—NEVER replace the room or output the second photo as the scene.'
+        : '',
       prevList.length > 0 ? `Context from earlier adjustments: ${prevList.join(' | ')}.` : '',
-      'Keep the room architecture, walls, windows, furniture, shadows, and camera angle exactly as in image 1, changing only what was requested.',
+      'Keep the exact same room, furniture, beds, rugs, walls, windows, lighting, and camera angle from the first image, changing ONLY the requested floor aspect.',
     ]
       .filter(Boolean)
       .join(' ');

@@ -97,7 +97,8 @@ export function buildCleanFloorPrompt(options: {
   }
 
   const lines: string[] = [
-    `Replace ONLY the floor in image 1 with the floor shown in ${refDesc} ("${productName}").`,
+    `Edit ONLY the ROOM IMAGE (first image): replace its floor surface with the wood flooring material shown in the FLOOR REFERENCE ${referenceCount <= 1 ? 'image' : `images (${referenceLabels.join(', ')})`} ("${productName}").`,
+    'Do NOT copy furniture, mirrors, walls, doors, or camera framing from any reference photo—transfer ONLY the floor surface.',
   ];
 
   if (constraints.length > 0) {
@@ -109,7 +110,7 @@ export function buildCleanFloorPrompt(options: {
   }
 
   lines.push(
-    'Keep walls, furniture, rugs, lighting, natural shadows under objects, and camera perspective identical to image 1.'
+    'Keep the room walls, furniture, rugs, natural lighting, shadows under objects, and exact camera perspective identical to the ROOM IMAGE.'
   );
 
   return lines.join(' ');
@@ -123,11 +124,13 @@ export function buildRefinementPrompt(options: {
   const { instruction, hasReferenceImage, previousInstructions = [] } = options;
 
   const parts: string[] = [
-    `Edit image 1 (the current room render) following this correction: "${instruction.trim()}".`,
+    `Edit ONLY the TARGET ROOM IMAGE (first image) following this user correction: "${instruction.trim()}".`,
   ];
 
   if (hasReferenceImage) {
-    parts.push('Image 2 is the original wood floor reference sample for grain/tone consistency if needed.');
+    parts.push(
+      'The second image is ONLY a wood floor material swatch for grain/color consistency—NEVER replace the room or output the second photo as the scene.'
+    );
   }
 
   if (previousInstructions.length > 0) {
@@ -135,7 +138,7 @@ export function buildRefinementPrompt(options: {
   }
 
   parts.push(
-    'Keep the room architecture, walls, windows, furniture, shadows, and camera angle exactly as in image 1, changing only what was requested.'
+    'Keep the exact same room, furniture, beds, rugs, walls, windows, lighting, and camera angle from the first image, changing ONLY the requested floor aspect.'
   );
 
   return parts.join(' ');

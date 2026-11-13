@@ -58,6 +58,9 @@ export async function generateWithGoogleNanoBanana(params: DirectNanoBananaParam
 
   const parts: any[] = [
     {
+      text: 'TARGET ROOM IMAGE TO KEEP (preserve this exact room, furniture, walls, rugs, lighting, and camera angle; replace ONLY the floor):',
+    },
+    {
       inlineData: {
         mimeType: roomParsed.mimeType,
         data: roomParsed.data,
@@ -65,8 +68,12 @@ export async function generateWithGoogleNanoBanana(params: DirectNanoBananaParam
     },
   ];
 
-  floorImages.forEach((img) => {
+  floorImages.forEach((img, idx) => {
     const parsed = parseDataUrl(img);
+    const label = floorImageLabels[idx] || `Sample #${idx + 1}`;
+    parts.push({
+      text: `FLOOR MATERIAL REFERENCE ONLY (${label} — ignore any furniture, mirrors, or walls in this photo; extract ONLY the wood floor color, grain, and planks):`,
+    });
     parts.push({
       inlineData: {
         mimeType: parsed.mimeType,
@@ -181,6 +188,9 @@ export async function refineWithGoogleNanoBanana(params: DirectRefineParams): Pr
 
   const parts: any[] = [
     {
+      text: 'TARGET ROOM IMAGE TO EDIT (keep this exact room, furniture, bed, rug, walls, and camera angle; modify ONLY the floor as requested):',
+    },
+    {
       inlineData: {
         mimeType: baseParsed.mimeType,
         data: baseParsed.data,
@@ -190,6 +200,9 @@ export async function refineWithGoogleNanoBanana(params: DirectRefineParams): Pr
 
   if (referenceImageUrl) {
     const refParsed = parseDataUrl(referenceImageUrl);
+    parts.push({
+      text: 'FLOOR MATERIAL REFERENCE ONLY (NEVER output this room or its furniture/mirrors; use only as wood texture/color reference):',
+    });
     parts.push({
       inlineData: {
         mimeType: refParsed.mimeType,
