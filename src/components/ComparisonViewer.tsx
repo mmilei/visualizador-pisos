@@ -42,7 +42,6 @@ const QUICK_CORRECTIONS = [
   'Sacale brillo, dejalo mate natural',
   'Tablas más anchas',
   'Tablas más angostas',
-  'Que se parezca más fielmente a la foto muestra',
 ];
 
 export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
@@ -64,8 +63,6 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   const [isApproved, setIsApproved] = useState(false);
 
   const [chatInput, setChatInput] = useState('');
-  // Off by default: avoids sending a second room photo when editing direction/tone/width/matte on the active render
-  const [includeReference, setIncludeReference] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -136,7 +133,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
     link.click();
   };
 
-  const handleSendInstruction = async (textToSend?: string, forceIncludeRef?: boolean) => {
+  const handleSendInstruction = async (textToSend?: string) => {
     const clean = (textToSend ?? chatInput).trim();
     if (!clean || isRefining) return;
     if (!textToSend) setChatInput('');
@@ -145,7 +142,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
     await onRefineResult({
       baseImageUrl: result.resultImageUrl,
       instruction: clean,
-      includeReference: forceIncludeRef ?? includeReference,
+      includeReference: false,
     });
   };
 
@@ -353,29 +350,6 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
               </div>
             )}
           </div>
-
-          {/* Reference Images Strip (desktop only here; mobile shows after chat so chat stays visible immediately under image) */}
-          {!isFullscreen && result.referenceImages && result.referenceImages.length > 0 && (
-            <div className="hidden lg:flex p-3 rounded-2xl bg-stone-900/80 border border-stone-800 items-center justify-between gap-3">
-              <div className="text-xs text-stone-400 shrink-0">
-                Muestra enviada ({result.referenceImages.length})
-              </div>
-              <div className="flex items-center gap-2 overflow-x-auto">
-                {result.referenceImages.map((refImg, i) => (
-                  <div
-                    key={i}
-                    className="relative h-12 w-18 rounded-lg overflow-hidden border border-stone-700/80 shrink-0 bg-stone-950"
-                  >
-                    <img
-                      src={refImg}
-                      alt={`Referencia ${i + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Immediate Confirmation & Conversational Refinement Chat Panel */}
@@ -548,12 +522,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                   key={q}
                   type="button"
                   disabled={isRefining}
-                  onClick={() =>
-                    handleSendInstruction(
-                      q,
-                      q.toLowerCase().includes('foto muestra') ? true : undefined
-                    )
-                  }
+                  onClick={() => handleSendInstruction(q)}
                   className="min-h-[34px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-40 text-stone-300 text-[11px] whitespace-nowrap shrink-0 transition-colors cursor-pointer"
                 >
                   {q}
@@ -563,17 +532,6 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
             {/* Chat Composer */}
             <div className="p-3 border-t border-stone-800 bg-stone-950/80 space-y-2">
-              {result.referenceImages && result.referenceImages.length > 0 && (
-                <label className="flex items-center gap-2 text-[11px] text-stone-400 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={includeReference}
-                    onChange={(e) => setIncludeReference(e.target.checked)}
-                    className="accent-amber-600 rounded"
-                  />
-                  <span>Re-enviar también la muestra del piso (solo si querés copiar más su textura)</span>
-                </label>
-              )}
 
               <div className="flex items-end gap-2">
                 <textarea
@@ -605,29 +563,6 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
           </div>
         )}
       </div>
-
-      {/* Mobile Reference Strip (placed below chat so the prompt/chat is visible immediately below the image) */}
-      {!isFullscreen && result.referenceImages && result.referenceImages.length > 0 && (
-        <div className="lg:hidden p-3 rounded-2xl bg-stone-900/80 border border-stone-800 flex items-center justify-between gap-3">
-          <div className="text-xs text-stone-400 shrink-0">
-            Muestra enviada ({result.referenceImages.length})
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {result.referenceImages.map((refImg, i) => (
-              <div
-                key={i}
-                className="relative h-12 w-18 rounded-lg overflow-hidden border border-stone-700/80 shrink-0 bg-stone-950"
-              >
-                <img
-                  src={refImg}
-                  alt={`Referencia ${i + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Bottom Action Footer */}
       {!isFullscreen && (

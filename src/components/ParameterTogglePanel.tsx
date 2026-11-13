@@ -154,19 +154,19 @@ export const ParameterTogglePanel: React.FC<ParameterTogglePanelProps> = ({
         </div>
       </div>
 
-      {/* Reference Photo Picker when floor has multiple photos */}
+      {/* Text-only Reference Photo Selector (no sample thumbnails shown outside Mis Pisos Guardados) */}
       {availablePhotos.length > 1 && (
-        <div className="p-3.5 rounded-2xl bg-stone-900/70 border border-stone-800 space-y-2.5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <span className="text-xs font-semibold text-stone-200">
-              Fotos de muestra a enviar ({selectedPhotoIndices.length} de {availablePhotos.length} seleccionadas)
+        <div className="p-3 rounded-2xl bg-stone-900/70 border border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-xs font-semibold text-stone-200 block">
+              Fotos de este piso a enviar ({selectedPhotoIndices.length} de {availablePhotos.length})
             </span>
             <span className="text-[11px] text-stone-400">
-              Recomendado: enviar 1 o 2 fotos claras del piso para no confundir a la IA
+              Por defecto se envía solo la foto #1 para no confundir a la IA
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+          <div className="flex flex-wrap items-center gap-1.5">
             {availablePhotos.map((photo, idx) => {
               const isSelected = selectedPhotoIndices.includes(idx);
               return (
@@ -174,28 +174,14 @@ export const ParameterTogglePanel: React.FC<ParameterTogglePanelProps> = ({
                   key={photo.id || idx}
                   type="button"
                   onClick={() => onTogglePhotoIndex(idx)}
-                  className={`relative h-20 w-28 rounded-xl overflow-hidden shrink-0 border transition-all cursor-pointer text-left ${
+                  className={`min-h-[36px] px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer tabular-nums ${
                     isSelected
-                      ? 'border-amber-500 ring-2 ring-amber-500/40'
-                      : 'border-stone-800 opacity-50 hover:opacity-85'
+                      ? 'bg-amber-600 border-amber-500 text-white font-semibold'
+                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  <img
-                    src={photo.dataUrl}
-                    alt={photo.name || `Muestra ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-                  <span
-                    className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      isSelected ? 'bg-amber-500 text-stone-950' : 'bg-stone-900/80 text-stone-400 border border-stone-700'
-                    }`}
-                  >
-                    {isSelected ? <Check className="w-3 h-3 stroke-[3]" /> : idx + 1}
-                  </span>
-                  <span className="absolute bottom-1 left-1.5 right-1.5 text-[10px] text-stone-200 truncate font-medium">
-                    {photo.type || `Foto ${idx + 1}`}
-                  </span>
+                  {isSelected && <Check className="w-3 h-3 stroke-[2.5]" />}
+                  <span>Foto {idx + 1}</span>
                 </button>
               );
             })}
