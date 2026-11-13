@@ -21,25 +21,22 @@ export const Header: React.FC<HeaderProps> = ({
   hasApiKey,
 }) => {
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between gap-4 px-4 sm:px-8 py-3 bg-stone-900/90 backdrop-blur-md border-b border-stone-800 text-stone-100">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-8 py-2.5 sm:py-3 bg-stone-900/90 backdrop-blur-md border-b border-stone-800 text-stone-100">
       {/* Zone 1: Wordmark */}
       <button
         onClick={onReset}
-        className="flex items-center gap-2.5 text-left group cursor-pointer"
+        className="flex items-center gap-2.5 text-left group cursor-pointer min-w-0"
         title="Reiniciar y volver al inicio"
       >
-        <span className="w-8 h-8 rounded-lg bg-amber-700/80 border border-amber-600/50 flex items-center justify-center font-bold text-amber-100 text-sm shadow-sm group-hover:bg-amber-600 transition-colors">
+        <span className="w-8 h-8 rounded-lg bg-amber-700/80 border border-amber-600/50 flex items-center justify-center font-bold text-amber-100 text-sm shadow-sm group-hover:bg-amber-600 transition-colors shrink-0">
           VP
         </span>
-        <div className="flex flex-col">
-          <span className="text-base font-bold tracking-tight text-stone-100 whitespace-nowrap shrink-0 flex items-center gap-1.5">
+        <div className="flex flex-col min-w-0">
+          <span className="text-sm sm:text-base font-bold tracking-tight text-stone-100 whitespace-nowrap truncate">
             Visualizador de Pisos
-            <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
-              Nano Banana AI
-            </span>
           </span>
-          <span className="text-[11px] text-stone-400 font-medium tracking-wide">
-            Inteligencia Artificial Multimodal
+          <span className="hidden sm:block text-[11px] text-stone-400 font-medium tracking-wide whitespace-nowrap">
+            Nano Banana · Ensayo Fotorrealista
           </span>
         </div>
       </button>
@@ -76,12 +73,12 @@ export const Header: React.FC<HeaderProps> = ({
           className="hover:text-amber-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5"
         >
           <History className="w-3.5 h-3.5 text-stone-400" />
-          <span>Historial {historyCount > 0 ? `(${historyCount})` : ''}</span>
+          <span className="tabular-nums">Historial {historyCount > 0 ? `(${historyCount})` : ''}</span>
         </button>
 
         <button
           onClick={onOpenKeyModal}
-          className={`px-2.5 py-1 rounded-lg border transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 font-semibold ${
+          className={`px-2.5 py-1.5 rounded-lg border transition-all whitespace-nowrap shrink-0 cursor-pointer flex items-center gap-1.5 font-semibold ${
             hasApiKey
               ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-300 hover:bg-emerald-900/50'
               : 'bg-amber-950/40 border-amber-700/50 text-amber-300 hover:bg-amber-900/50'
@@ -93,30 +90,45 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </nav>
 
-      {/* Zone 3: Download ZIP & Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Zone 3: Compact Actions */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
         <a
-          href="/visualizador-pisos.zip"
+          href="./visualizador-pisos.zip"
           download="visualizador-pisos.zip"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-xs text-amber-300 hover:text-amber-200 font-medium transition-colors cursor-pointer shadow-sm"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-xs text-amber-300 hover:text-amber-200 font-medium transition-colors cursor-pointer shadow-sm whitespace-nowrap shrink-0"
           title="Descargar el proyecto completo en archivo .ZIP para subir a GitHub"
         >
           <Download className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">Descargar Código (.ZIP)</span>
-          <span className="sm:hidden">.ZIP</span>
+          <span className="hidden lg:inline">Descargar Código (.ZIP)</span>
+          <span className="lg:hidden">.ZIP</span>
         </a>
 
         <button
-          onClick={onOpenQrModal}
-          className="md:hidden flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-amber-800/80 hover:bg-amber-700 text-amber-200 rounded-lg border border-amber-600/50 transition-colors cursor-pointer"
+          onClick={onOpenKeyModal}
+          className={`md:hidden min-h-[40px] px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap shrink-0 ${
+            hasApiKey
+              ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-300'
+              : 'bg-stone-800 border-stone-700 text-amber-300'
+          }`}
+          title="Configurar clave Gemini Nano Banana"
         >
-          <QrCode className="w-3.5 h-3.5" />
-          <span>QR</span>
+          <Key className="w-3.5 h-3.5" />
+          <span>{hasApiKey ? 'IA' : 'Clave'}</span>
+        </button>
+
+        <button
+          onClick={onOpenHistoryModal}
+          className="md:hidden min-h-[40px] min-w-[40px] px-2 py-1.5 text-xs font-medium bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-lg border border-stone-700 transition-colors cursor-pointer flex items-center justify-center gap-1 shrink-0"
+          title="Ver historial de pruebas"
+          aria-label="Historial"
+        >
+          <History className="w-3.5 h-3.5" />
+          {historyCount > 0 && <span className="text-[10px] tabular-nums">{historyCount}</span>}
         </button>
 
         <button
           onClick={onReset}
-          className="px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-700 hover:bg-amber-600 active:scale-95 rounded-lg border border-amber-600/50 shadow-sm transition-all whitespace-nowrap shrink-0 cursor-pointer"
+          className="min-h-[40px] px-3 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-amber-700 hover:bg-amber-600 active:scale-95 rounded-lg border border-amber-600/50 shadow-sm transition-all whitespace-nowrap shrink-0 cursor-pointer"
         >
           Nueva Foto
         </button>

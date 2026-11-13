@@ -164,7 +164,7 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {customFloors.map((floor) => {
                 const isSelected = selectedProduct?.id === floor.id;
-                const primaryImage = floor.images[0]?.dataUrl || '/texturas/roble-eslavonia-hd.jpg';
+                const primaryImage = floor.images[0]?.dataUrl || './texturas/roble-eslavonia-hd.jpg';
 
                 return (
                   <div

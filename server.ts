@@ -78,7 +78,16 @@ function parseDataUrl(dataUrl: string): { mimeType: string; data: string } {
 // Floor transformation endpoint
 app.post('/api/generate-floor', async (req, res) => {
   try {
-    const { roomImage, floorImages, floorImageLabels, productName, woodDetails, customPrompt, plankOrientation, aspectRatio } = req.body;
+    const {
+      roomImage,
+      floorImages,
+      floorImageLabels,
+      productName,
+      promptText: clientPromptText,
+      customPrompt,
+      aspectRatio,
+      modelChoice,
+    } = req.body;
 
     if (!roomImage) {
       return res.status(400).json({ error: 'La foto del ambiente es requerida.' });
@@ -101,8 +110,8 @@ app.post('/api/generate-floor', async (req, res) => {
       },
     ];
 
-    // Prepare floor reference parts and description list
-    const referenceDescriptions: string[] = [];
+    // Prepare floor reference parts
+    const referenceLabels: string[] = [];
     for (let i = 0; i < floorImages.length; i++) {
       const floorImg = floorImages[i];
       if (typeof floorImg === 'string' && floorImg.length > 0) {
@@ -113,73 +122,51 @@ app.post('/api/generate-floor', async (req, res) => {
             data: parsed.data,
           },
         });
-        const label = Array.isArray(floorImageLabels) && floorImageLabels[i] ? floorImageLabels[i] : `Muestra de referencia #${i + 1}`;
-        referenceDescriptions.push(`- Reference Image #${i + 2}: ${label}`);
+        const label =
+          Array.isArray(floorImageLabels) && floorImageLabels[i]
+            ? floorImageLabels[i]
+            : `Sample #${i + 1}`;
+        referenceLabels.push(label);
       }
     }
 
-    const plankWidthStr = woodDetails?.widthCm ? `${woodDetails.widthCm} cm` : '';
-    const plankFormatStr = woodDetails?.format ? woodDetails.format.toUpperCase() : 'PARALELO/RECTO';
-    const finishStr = woodDetails?.finish || 'Satinado natural';
-    const speciesStr = woodDetails?.species || 'Madera natural seleccionada';
+    const refDesc =
+      parts.length - 1 <= 1
+        ? 'image 2'
+        : `images 2 to ${parts.length} (${referenceLabels.map((l, idx) => `image ${idx + 2}: ${l}`).join(', ')})`;
 
-    // Mandatory Plank Direction / Orientation
-    const orientationDirective = plankOrientation === 'horizontal'
-      ? 'MANDATORY PLANK ORIENTATION: HORIZONTAL / TRANSVERSAL (Tablas a lo ancho). The wood planks MUST run horizontally across the room from left to right, perpendicular to the camera viewpoint.'
-      : plankOrientation === 'diagonal'
-      ? 'MANDATORY PLANK ORIENTATION: DIAGONAL 45 DEGREES across the room floor.'
-      : 'MANDATORY PLANK ORIENTATION: VERTICAL / LONGITUDINAL (Tablas en profundidad hacia el fondo). The wood planks MUST run longitudinally from the foreground into the depth/background of the room, parallel to the line of sight.';
+    const finalPromptText =
+      typeof clientPromptText === 'string' && clientPromptText.trim()
+        ? clientPromptText.trim()
+        : [
+            `Replace ONLY the floor in image 1 with the floor shown in ${refDesc} ("${productName || 'Wood Floor'}").`,
+            customPrompt ? `Additional request: ${String(customPrompt).trim()}` : '',
+            'Keep walls, furniture, rugs, lighting, natural shadows under objects, and camera perspective identical to image 1.',
+          ]
+            .filter(Boolean)
+            .join(' ');
 
-    const promptText = `
-You are an expert architectural and interior visualization AI.
-The first image provided is a real photo of a room/interior space.
-The subsequent ${parts.length - 1} image(s) show target wood floor product sample(s) to install:
-${referenceDescriptions.join('\n')}
+    parts.push({ text: finalPromptText });
 
-MULTI-PHOTO REFERENCE INTEGRATION:
-- If a reference shows a close-up/macro, prioritize it for the wood grain micro-texture, pore relief, bevels, and micro-color nuances.
-- If a reference shows an installed room or wide angle, use it for authentic plank-to-plank shade variation, bevel joint spacing, and ambient light bounce.
-- Synthesize all provided reference photos into a cohesive, photorealistic new floor.
-
-EXACT FLOOR SPECIFICATIONS & GEOMETRY:
-- Product Name: "${productName || 'Wood Floor'}"
-- Wood Species: ${speciesStr}
-- Plank Pattern: ${plankFormatStr}
-- ${orientationDirective}
-${plankWidthStr ? `- Exact Plank Width: ${plankWidthStr}. Use room furniture legs and doors as scale reference so planks appear accurately proportioned at ${plankWidthStr}.` : ''}
-- Surface Finish: ${finishStr}
-${customPrompt ? `- ADDITIONAL USER INSTRUCTIONS: "${customPrompt}"` : ''}
-
-TASK:
-Generate a photorealistic, professional photograph showing the EXACT SAME ROOM from the first image, where ONLY the existing floor surface has been replaced with the wood floor shown in the reference image(s).
-
-STRICT PRESERVATION RULES:
-1. Preserve the exact room architecture, walls, windows, doors, ceiling, structural pillars, baseboards, and wall finishes.
-2. Keep all furniture, tables, chairs, sofas, decorations, rugs (unless on the floor being replaced), and objects in their exact positions and forms.
-3. The camera angle, perspective, lens focal length, framing, and vantage point must remain 100% identical to image 1.
-
-PHOTOREALISTIC FLOOR INTEGRATION RULES:
-1. Lay the wood floor strictly following the specified orientation (${plankOrientation || 'vertical'}) and scale (${plankWidthStr || 'standard plank width'}).
-2. Match the exact wood species, tone, natural color variation, plank layout (straight, herringbone, or chevron according to the reference), texture, and grain from the reference image(s).
-3. Cast soft, realistic contact shadows directly beneath all furniture legs, baseboards, and any objects touching the floor.
-4. Render natural ambient lighting, window sheen, subtle specular gloss, and reflections consistent with the room's real light sources.
-`.trim();
-
-    parts.push({ text: promptText });
-
-    // Supported aspect ratios: "1:1", "3:4", "4:3", "9:16", "16:9"
     const validRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
     const selectedRatio = validRatios.includes(aspectRatio) ? aspectRatio : '4:3';
 
+    const preferredModel =
+      modelChoice === 'gemini-3.1-flash-lite-image'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+    const fallbackModel =
+      preferredModel === 'gemini-nano-banana-2.1'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+
     let generatedImageUrl: string | null = null;
-    let modelUsed = 'gemini-3.1-flash-lite-image';
+    let modelUsed = preferredModel;
 
     try {
       const response = await ai.models.generateContent({
         model: modelUsed,
-        contents: {
-          parts,
-        },
+        contents: { parts },
         config: {
           imageConfig: {
             aspectRatio: selectedRatio,
@@ -195,13 +182,11 @@ PHOTOREALISTIC FLOOR INTEGRATION RULES:
         }
       }
     } catch (primaryErr: any) {
-      console.warn(`Primary model ${modelUsed} failed, attempting gemini-nano-banana-2.1:`, primaryErr?.message);
-      modelUsed = 'gemini-nano-banana-2.1';
+      console.warn(`Primary model ${modelUsed} failed, attempting ${fallbackModel}:`, primaryErr?.message);
+      modelUsed = fallbackModel;
       const fallbackResponse = await ai.models.generateContent({
         model: modelUsed,
-        contents: {
-          parts,
-        },
+        contents: { parts },
         config: {
           imageConfig: {
             aspectRatio: selectedRatio,
@@ -228,19 +213,148 @@ PHOTOREALISTIC FLOOR INTEGRATION RULES:
       success: true,
       imageUrl: generatedImageUrl,
       model: modelUsed,
+      promptUsed: finalPromptText,
     });
   } catch (error: any) {
     console.error('Error generating floor image:', error);
     const rawMsg = typeof error === 'string' ? error : (error?.message || error?.toString?.() || JSON.stringify(error) || '');
     if (rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED') || rawMsg.includes('quota') || rawMsg.includes('limit exceeded')) {
       return res.status(429).json({
-        error: 'Límite de cuota alcanzado en la API de Gemini Imagen. Los modelos de generación fotorrealista requieren asociar facturación activa (Pay-as-you-go) en Google AI Studio (~$0.03 por imagen). Para ensayar inmediatamente tu ambiente sin costo, pulsa "Simulación Inmediata".',
+        error: 'Límite de cuota alcanzado en la API de Google Gemini Imagen. Verifica que tu clave tenga facturación activa (Pay-as-you-go) en Google AI Studio.',
         isQuotaExhausted: true,
         code: 429,
       });
     }
     const message = rawMsg || 'Error interno al procesar la imagen.';
     return res.status(500).json({ error: message });
+  }
+});
+
+// Conversational floor refinement endpoint (edits the latest generated image)
+app.post('/api/refine-floor', async (req, res) => {
+  try {
+    const {
+      baseImageUrl,
+      referenceImageUrl,
+      instruction,
+      previousInstructions,
+      aspectRatio,
+      modelChoice,
+    } = req.body;
+
+    if (!baseImageUrl) {
+      return res.status(400).json({ error: 'Falta la imagen actual para corregir.' });
+    }
+    if (!instruction || !String(instruction).trim()) {
+      return res.status(400).json({ error: 'Escribe una indicación de corrección.' });
+    }
+
+    const ai = getAiClient();
+    const baseParsed = parseDataUrl(baseImageUrl);
+    const parts: any[] = [
+      {
+        inlineData: {
+          mimeType: baseParsed.mimeType,
+          data: baseParsed.data,
+        },
+      },
+    ];
+
+    if (referenceImageUrl && typeof referenceImageUrl === 'string') {
+      const refParsed = parseDataUrl(referenceImageUrl);
+      parts.push({
+        inlineData: {
+          mimeType: refParsed.mimeType,
+          data: refParsed.data,
+        },
+      });
+    }
+
+    const prevList = Array.isArray(previousInstructions)
+      ? previousInstructions.filter((x) => typeof x === 'string' && x.trim()).slice(-3)
+      : [];
+
+    const promptText = [
+      `Edit image 1 (the current room render) following this correction: "${String(instruction).trim()}".`,
+      referenceImageUrl ? 'Image 2 is the original wood floor reference sample for grain/tone consistency if needed.' : '',
+      prevList.length > 0 ? `Context from earlier adjustments: ${prevList.join(' | ')}.` : '',
+      'Keep the room architecture, walls, windows, furniture, shadows, and camera angle exactly as in image 1, changing only what was requested.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    parts.push({ text: promptText });
+
+    const validRatios = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+    const selectedRatio = validRatios.includes(aspectRatio) ? aspectRatio : '4:3';
+
+    const preferredModel =
+      modelChoice === 'gemini-3.1-flash-lite-image'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+    const fallbackModel =
+      preferredModel === 'gemini-nano-banana-2.1'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+
+    let generatedImageUrl: string | null = null;
+    let assistantText = '';
+    let modelUsed = preferredModel;
+
+    const extractParts = (resp: any) => {
+      for (const part of resp?.candidates?.[0]?.content?.parts ?? []) {
+        if (part.inlineData?.data && !generatedImageUrl) {
+          const mime = part.inlineData.mimeType || 'image/png';
+          generatedImageUrl = `data:${mime};base64,${part.inlineData.data}`;
+        } else if (part.text) {
+          assistantText += (assistantText ? '\n' : '') + part.text;
+        }
+      }
+    };
+
+    try {
+      const response = await ai.models.generateContent({
+        model: modelUsed,
+        contents: { parts },
+        config: {
+          imageConfig: {
+            aspectRatio: selectedRatio,
+          },
+        },
+      });
+      extractParts(response);
+    } catch (primaryErr: any) {
+      console.warn(`Refine primary ${modelUsed} failed, attempting ${fallbackModel}:`, primaryErr?.message);
+      modelUsed = fallbackModel;
+      const fallbackResp = await ai.models.generateContent({
+        model: modelUsed,
+        contents: { parts },
+        config: {
+          imageConfig: {
+            aspectRatio: selectedRatio,
+          },
+        },
+      });
+      extractParts(fallbackResp);
+    }
+
+    if (!generatedImageUrl) {
+      return res.status(502).json({
+        error: 'El modelo no devolvió una nueva imagen corregida. Intenta reformular la corrección.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      imageUrl: generatedImageUrl,
+      model: modelUsed,
+      assistantText: assistantText || undefined,
+      promptUsed: promptText,
+    });
+  } catch (error: any) {
+    console.error('Error refining floor image:', error);
+    const rawMsg = typeof error === 'string' ? error : (error?.message || error?.toString?.() || JSON.stringify(error) || '');
+    return res.status(500).json({ error: rawMsg || 'Error interno al corregir la imagen.' });
   }
 });
 

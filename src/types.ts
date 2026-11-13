@@ -1,5 +1,15 @@
 export type PlankPattern = 'recto' | 'chevron' | 'espiga' | 'deck';
 export type PlankOrientation = 'vertical' | 'horizontal' | 'diagonal';
+export type FloorModelChoice = 'gemini-nano-banana-2.1' | 'gemini-3.1-flash-lite-image';
+
+export interface FloorParametersConfig {
+  orientation: { enabled: boolean; value: PlankOrientation };
+  widthCm: { enabled: boolean; value: string };
+  format: { enabled: boolean; value: PlankPattern };
+  tone: { enabled: boolean; value: string };
+  finish: { enabled: boolean; value: string };
+  lighting: { enabled: boolean; value: 'ventana' | 'ambiente' };
+}
 
 export interface FloorProduct {
   id: string;
@@ -37,6 +47,16 @@ export interface CustomFloorData {
   createdAt: number;
 }
 
+export interface ChatRefinementMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  imageUrl?: string;
+  modelUsed?: string;
+  versionNumber?: number;
+  timestamp: number;
+}
+
 export interface TransformationResult {
   id: string;
   timestamp: number;
@@ -46,4 +66,7 @@ export interface TransformationResult {
   floorDetails: string;
   referenceImages: string[];
   modelUsed: string;
+  promptUsed?: string;
+  aspectRatio?: string;
+  messages?: ChatRefinementMessage[];
 }

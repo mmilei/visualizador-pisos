@@ -11,7 +11,7 @@
       {
         "id": "seed-img-1",
         "name": "roble_eslavonia_hd",
-        "dataUrl": "/texturas/roble-eslavonia-hd.jpg",
+        "dataUrl": "./texturas/roble-eslavonia-hd.jpg",
         "type": "Primer plano (veta y poro)"
       }
     ],
@@ -29,7 +29,7 @@
       {
         "id": "seed-img-2",
         "name": "roble_chevron_hd",
-        "dataUrl": "/texturas/roble-chevron-hd.jpg",
+        "dataUrl": "./texturas/roble-chevron-hd.jpg",
         "type": "Piso colocado / instalado"
       }
     ],
@@ -47,7 +47,7 @@
       {
         "id": "seed-img-3",
         "name": "lapacho_hd",
-        "dataUrl": "/texturas/lapacho-hd.jpg",
+        "dataUrl": "./texturas/lapacho-hd.jpg",
         "type": "Primer plano (veta y poro)"
       }
     ],
