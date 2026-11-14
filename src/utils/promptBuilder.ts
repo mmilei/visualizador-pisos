@@ -9,7 +9,10 @@ export const DEFAULT_FLOOR_PARAMETERS: FloorParametersConfig = {
   lighting: { enabled: false, value: 'ventana' },
 };
 
-export function createInitialFloorParameters(productWidthCm?: number, productFormat?: string): FloorParametersConfig {
+export function createInitialFloorParameters(
+  productWidthCm?: number,
+  productFormat?: string
+): FloorParametersConfig {
   return {
     orientation: { enabled: false, value: 'vertical' },
     widthCm: { enabled: false, value: productWidthCm ? String(productWidthCm) : '18' },
@@ -23,6 +26,23 @@ export function createInitialFloorParameters(productWidthCm?: number, productFor
   };
 }
 
+export function buildSwatchExtractionPrompt(options: {
+  productName: string;
+  referenceLabels?: string[];
+}): string {
+  const { productName, referenceLabels = [] } = options;
+  const labelHint =
+    referenceLabels.length > 0 ? ` (${referenceLabels.join(', ')})` : '';
+
+  return [
+    `Inspect the provided reference photo(s)${labelHint} of the wood flooring product "${productName}".`,
+    'Generate ONE clean, flat, straight-on orthographic top-down studio texture sample of ONLY this flooring material filling 100% of the frame edge-to-edge.',
+    'Extract the exact wood species color, plank grain, natural knots, micro-bevel seams, plank proportions, and matte/satin sheen of the actual FLOOR planks shown.',
+    'COMPLETELY EXCLUDE any walls, wood ceilings, kitchen cabinets, stairs, people, tools, plastic sheets, rugs, text labels, borders, or white collage margins.',
+    'The output must look like a pure seamless overhead photograph of newly installed planks under even neutral lighting, with straight parallel vertical planks unless the floor in the photos is explicitly chevron/herringbone.',
+  ].join(' ');
+}
+
 export function buildCleanFloorPrompt(options: {
   productName: string;
   referenceCount: number;
@@ -30,15 +50,19 @@ export function buildCleanFloorPrompt(options: {
   params: FloorParametersConfig;
   customPrompt?: string;
 }): string {
-  const { productName, referenceCount, referenceLabels = [], params, customPrompt = '' } = options;
+  const {
+    productName,
+    referenceCount,
+    referenceLabels = [],
+    params,
+    customPrompt = '',
+  } = options;
 
   const refDesc =
     referenceCount <= 1
-      ? 'image 2'
-      : `images 2 to ${referenceCount + 1}${
-          referenceLabels.length > 0
-            ? ` (${referenceLabels.map((l, idx) => `image ${idx + 2}: ${l}`).join(', ')})`
-            : ''
+      ? 'the second image'
+      : `the reference images${
+          referenceLabels.length > 0 ? ` (${referenceLabels.join(', ')})` : ''
         }`;
 
   const constraints: string[] = [];
@@ -53,13 +77,15 @@ export function buildCleanFloorPrompt(options: {
     } else if (params.orientation.value === 'diagonal') {
       constraints.push('lay the planks diagonally at 45 degrees');
     } else {
-      constraints.push('lay the planks vertically (running into the depth of the room toward the back wall/window)');
+      constraints.push(
+        'lay the planks vertically (running into the depth of the room toward the back wall/window)'
+      );
     }
   }
 
   if (params.format.enabled) {
     const formatMap: Record<string, string> = {
-      recto: 'straight running-bond planks',
+      recto: 'straight running-bond planks (discard any existing herringbone/chevron/tile pattern)',
       chevron: '45-degree French Chevron pattern',
       espiga: '90-degree Herringbone pattern',
       deck: 'parallel deck planks with subtle shadow gaps',
@@ -97,12 +123,13 @@ export function buildCleanFloorPrompt(options: {
   }
 
   const lines: string[] = [
-    `Edit ONLY the ROOM IMAGE (first image): replace its floor surface with the wood flooring material shown in the FLOOR REFERENCE ${referenceCount <= 1 ? 'image' : `images (${referenceLabels.join(', ')})`} ("${productName}").`,
-    'Do NOT copy furniture, mirrors, walls, doors, or camera framing from any reference photo—transfer ONLY the floor surface.',
+    `Perform a FULL FLOOR REPLACEMENT on Image 1 (the target room) using the flooring material from ${refDesc} ("${productName}").`,
+    'CRITICAL: Completely DEMOLISH and ERASE the existing floor in Image 1 — remove 100% of old floor boards, tiles, parquet/herringbone/chevron patterns, old plank seams, grout lines, knots, and pre-existing surface glare. Do NOT trace over, tint, or reuse the old floor seam layout.',
+    'Install brand-new continuous flooring from scratch across the entire floor area in accurate 3D room perspective, replicating the exact wood color, plank proportions, grain, knots, bevels, and surface sheen of the reference floor.',
   ];
 
   if (constraints.length > 0) {
-    lines.push(`Floor details: ${constraints.join('; ')}.`);
+    lines.push(`Requested floor specifications: ${constraints.join('; ')}.`);
   }
 
   if (customPrompt.trim()) {
@@ -110,7 +137,7 @@ export function buildCleanFloorPrompt(options: {
   }
 
   lines.push(
-    'Keep the room walls, furniture, rugs, natural lighting, shadows under objects, and exact camera perspective identical to the ROOM IMAGE.'
+    'Preserve ONLY non-floor elements from Image 1 (walls, baseboards, doors, windows, furniture, rugs, and natural contact shadows cast by furniture onto the new floor). Never copy furniture, ceilings, people, or text from any reference photo.'
   );
 
   return lines.join(' ');

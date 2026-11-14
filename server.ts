@@ -103,7 +103,7 @@ app.post('/api/generate-floor', async (req, res) => {
     const roomParsed = parseDataUrl(roomImage);
     const parts: any[] = [
       {
-        text: 'TARGET ROOM IMAGE TO KEEP (preserve this exact room, furniture, walls, rugs, lighting, and camera angle; replace ONLY the floor):',
+        text: 'IMAGE 1 — TARGET ROOM (keep walls, baseboards, furniture, rugs, and windows; COMPLETELY DEMOLISH and strip out the old floor surface and seams):',
       },
       {
         inlineData: {
@@ -113,9 +113,10 @@ app.post('/api/generate-floor', async (req, res) => {
       },
     ];
 
-    // Prepare floor reference parts with explicit material-only labels
+    // Prepare floor reference parts (cap at 2 clean references so context is never diluted)
     const referenceLabels: string[] = [];
-    for (let i = 0; i < floorImages.length; i++) {
+    const maxRefs = Math.min(floorImages.length, 2);
+    for (let i = 0; i < maxRefs; i++) {
       const floorImg = floorImages[i];
       if (typeof floorImg === 'string' && floorImg.length > 0) {
         const parsed = parseDataUrl(floorImg);
@@ -125,7 +126,7 @@ app.post('/api/generate-floor', async (req, res) => {
             : `Sample #${i + 1}`;
         referenceLabels.push(label);
         parts.push({
-          text: `FLOOR MATERIAL REFERENCE ONLY (${label} — ignore any furniture, mirrors, or walls in this photo; extract ONLY the wood floor color, grain, and planks):`,
+          text: `IMAGE ${referenceLabels.length + 1} — NEW FLOOR MATERIAL REFERENCE (${label} — extract ONLY the wood planks, tone, grain, knots, bevels, and finish; ignore any surroundings):`,
         });
         parts.push({
           inlineData: {
@@ -137,17 +138,19 @@ app.post('/api/generate-floor', async (req, res) => {
     }
 
     const refDesc =
-      parts.length - 1 <= 1
-        ? 'image 2'
-        : `images 2 to ${parts.length} (${referenceLabels.map((l, idx) => `image ${idx + 2}: ${l}`).join(', ')})`;
+      referenceLabels.length <= 1
+        ? 'the second image'
+        : `the reference images (${referenceLabels.join(', ')})`;
 
     const finalPromptText =
       typeof clientPromptText === 'string' && clientPromptText.trim()
         ? clientPromptText.trim()
         : [
-            `Replace ONLY the floor in image 1 with the floor shown in ${refDesc} ("${productName || 'Wood Floor'}").`,
+            `Perform a FULL FLOOR REPLACEMENT on Image 1 (the target room) using the flooring material from ${refDesc} ("${productName || 'Wood Floor'}").`,
+            'CRITICAL: Completely DEMOLISH and ERASE the existing floor in Image 1 — remove 100% of old floor boards, tiles, parquet/herringbone/chevron patterns, old plank seams, grout lines, knots, and pre-existing surface glare. Do NOT trace over, tint, or reuse the old floor seam layout.',
+            'Install brand-new continuous flooring from scratch across the entire floor area in accurate 3D room perspective, replicating the exact wood color, plank proportions, grain, knots, bevels, and surface sheen of the reference floor.',
             customPrompt ? `Additional request: ${String(customPrompt).trim()}` : '',
-            'Keep walls, furniture, rugs, lighting, natural shadows under objects, and camera perspective identical to image 1.',
+            'Preserve ONLY non-floor elements from Image 1 (walls, baseboards, doors, windows, furniture, rugs, and natural contact shadows cast by furniture onto the new floor).',
           ]
             .filter(Boolean)
             .join(' ');
@@ -233,6 +236,94 @@ app.post('/api/generate-floor', async (req, res) => {
     }
     const message = rawMsg || 'Error interno al procesar la imagen.';
     return res.status(500).json({ error: message });
+  }
+});
+
+// Synthesize 1 pure top-down plank swatch from up to 4 noisy/scene floor photos
+app.post('/api/extract-swatch', async (req, res) => {
+  try {
+    const { floorImages, floorImageLabels, productName, modelChoice } = req.body;
+    if (!floorImages || !Array.isArray(floorImages) || floorImages.length === 0) {
+      return res.status(400).json({ error: 'Se requiere al menos una foto para extraer la muestra.' });
+    }
+
+    const ai = getAiClient();
+    const capped = floorImages.slice(0, 4);
+    const labels = Array.isArray(floorImageLabels) ? floorImageLabels.slice(0, 4) : [];
+
+    const parts: any[] = [];
+    capped.forEach((img: string, idx: number) => {
+      if (typeof img === 'string' && img.length > 0) {
+        const parsed = parseDataUrl(img);
+        parts.push({
+          text: `INPUT PHOTO ${idx + 1} (${labels[idx] || `Sample #${idx + 1}`}) — examine ONLY the floor planks in this photo:`,
+        });
+        parts.push({
+          inlineData: {
+            mimeType: parsed.mimeType,
+            data: parsed.data,
+          },
+        });
+      }
+    });
+
+    parts.push({
+      text: [
+        `Inspect the provided reference photo(s) of the wood flooring product "${productName || 'Wood Floor'}".`,
+        'Generate ONE clean, flat, straight-on orthographic top-down studio texture sample of ONLY this flooring material filling 100% of the frame edge-to-edge.',
+        'Extract the exact wood species color, plank grain, natural knots, micro-bevel seams, plank proportions, and matte/satin sheen of the actual FLOOR planks shown.',
+        'COMPLETELY EXCLUDE any walls, wood ceilings, kitchen cabinets, stairs, people, tools, plastic sheets, rugs, text labels, borders, or white collage margins.',
+        'The output must look like a pure seamless overhead photograph of newly installed planks under even neutral lighting.',
+      ].join(' '),
+    });
+
+    const preferredModel =
+      modelChoice === 'gemini-3.1-flash-lite-image'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+    const fallbackModel =
+      preferredModel === 'gemini-nano-banana-2.1'
+        ? 'gemini-3.1-flash-lite-image'
+        : 'gemini-nano-banana-2.1';
+
+    let swatchUrl: string | null = null;
+    let modelUsed = preferredModel;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: modelUsed,
+        contents: { parts },
+        config: { imageConfig: { aspectRatio: '1:1' } },
+      });
+      for (const part of response.candidates?.[0]?.content?.parts ?? []) {
+        if (part.inlineData?.data) {
+          swatchUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    } catch (primaryErr) {
+      modelUsed = fallbackModel;
+      const fallbackResp = await ai.models.generateContent({
+        model: modelUsed,
+        contents: { parts },
+        config: { imageConfig: { aspectRatio: '1:1' } },
+      });
+      for (const part of fallbackResp.candidates?.[0]?.content?.parts ?? []) {
+        if (part.inlineData?.data) {
+          swatchUrl = `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    }
+
+    if (!swatchUrl) {
+      return res.status(502).json({ error: 'No se pudo sintetizar la muestra del piso.' });
+    }
+
+    return res.json({ success: true, swatchUrl, model: modelUsed });
+  } catch (error: any) {
+    console.error('Error extracting swatch:', error);
+    return res.status(500).json({ error: error?.message || 'Error al sintetizar muestra.' });
   }
 });
 

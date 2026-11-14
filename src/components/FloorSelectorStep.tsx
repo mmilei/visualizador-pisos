@@ -231,8 +231,10 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                     </div>
 
                     <div className="pt-2 border-t border-stone-800/80 flex items-center justify-between text-[11px]">
-                      <span className="text-amber-400 font-medium">
-                        Patrón: {floor.plankFormat.toUpperCase()}
+                      <span className="text-amber-400 font-medium truncate">
+                        {floor.cleanSwatchUrl
+                          ? 'Muestra limpia lista'
+                          : `Patrón: ${floor.plankFormat.toUpperCase()}`}
                       </span>
                       <button
                         type="button"

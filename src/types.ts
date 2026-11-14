@@ -44,6 +44,7 @@ export interface CustomFloorData {
   finish: string;
   notes: string;
   images: { id: string; name: string; dataUrl: string; type: string }[];
+  cleanSwatchUrl?: string;
   createdAt: number;
 }
 

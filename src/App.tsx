@@ -18,8 +18,9 @@ import {
   FloorParametersConfig,
   ChatRefinementMessage,
 } from './types';
-import { urlToDataUrl } from './utils/imageUtils';
+import { urlToDataUrl, downscaleDataUrl } from './utils/imageUtils';
 import {
+  extractCleanFloorSwatchDirect,
   generateWithGoogleNanoBanana,
   refineWithGoogleNanoBanana,
 } from './utils/geminiDirect';
@@ -79,6 +80,7 @@ export default function App() {
   }));
   const [modelChoice, setModelChoice] = useState<FloorModelChoice>('gemini-nano-banana-2.1');
   const [selectedPhotoIndices, setSelectedPhotoIndices] = useState<number[]>([0]);
+  const [useOptimizedSwatch, setUseOptimizedSwatch] = useState<boolean>(true);
   const [customPrompt, setCustomPrompt] = useState<string>('');
 
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -186,6 +188,11 @@ export default function App() {
     ];
   }, [selectedProduct, customFloors]);
 
+  const activeCustomFloor = useMemo(() => {
+    if (!selectedProduct?.isCustom) return null;
+    return customFloors.find((f) => f.id === selectedProduct.id) || null;
+  }, [selectedProduct, customFloors]);
+
   const activeParamCount = useMemo(
     () =>
       [
@@ -201,10 +208,13 @@ export default function App() {
 
   const selectedLabelsForPreview = useMemo(() => {
     if (availablePhotos.length === 0) return [];
+    if (activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1) {
+      return ['Muestra limpia cenital de tablas'];
+    }
     const indices = selectedPhotoIndices.filter((i) => i >= 0 && i < availablePhotos.length);
-    const activeIndices = indices.length > 0 ? indices : [0];
+    const activeIndices = (indices.length > 0 ? indices : [0]).slice(0, 2);
     return activeIndices.map((i) => availablePhotos[i]?.type || `Foto ${i + 1}`);
-  }, [availablePhotos, selectedPhotoIndices]);
+  }, [availablePhotos, selectedPhotoIndices, activeCustomFloor, useOptimizedSwatch]);
 
   const promptPreview = useMemo(
     () =>
@@ -273,6 +283,7 @@ export default function App() {
     const asProduct = asProductFromCustom(floor);
     setSelectedProduct(asProduct);
     setSelectedPhotoIndices([0]);
+    setUseOptimizedSwatch(true);
     setFloorParams(createInitialFloorParameters(asProduct.widthCm, asProduct.plankFormat));
     setActiveTab('custom');
     setErrorMessage(null);
@@ -304,6 +315,7 @@ export default function App() {
   const handleSelectProduct = (prod: FloorProduct) => {
     setSelectedProduct(prod);
     setSelectedPhotoIndices([0]);
+    setUseOptimizedSwatch(true);
     // Keep all toggles OFF when switching products, just prefill inactive default width/format hints
     setFloorParams((prev) => ({
       ...prev,
@@ -319,7 +331,9 @@ export default function App() {
         if (prev.length === 1) return prev;
         return prev.filter((item) => item !== idx);
       }
-      return [...prev, idx].sort((a, b) => a - b);
+      // Cap at max 2 reference photos per generation to avoid context dilution and payload timeouts
+      const next = prev.length >= 2 ? [...prev.slice(1), idx] : [...prev, idx];
+      return next.sort((a, b) => a - b);
     });
   };
 
@@ -361,10 +375,100 @@ export default function App() {
       if (selectedProduct.isCustom) {
         const floorObj = customFloors.find((f) => f.id === selectedProduct.id);
         if (floorObj && floorObj.images.length > 0) {
-          const validIndices = selectedPhotoIndices.filter((i) => i >= 0 && i < floorObj.images.length);
-          const indicesToSend = validIndices.length > 0 ? validIndices : [0];
-          floorImages = indicesToSend.map((i) => floorObj.images[i].dataUrl);
-          floorImageLabels = indicesToSend.map((i) => `${floorObj.images[i].type || floorObj.images[i].name}`);
+          const shouldUseSwatch =
+            useOptimizedSwatch && (Boolean(floorObj.cleanSwatchUrl) || floorObj.images.length > 1);
+
+          if (shouldUseSwatch) {
+            if (floorObj.cleanSwatchUrl) {
+              floorImages = [floorObj.cleanSwatchUrl];
+              floorImageLabels = ['Muestra limpia cenital de tablas'];
+            } else {
+              setGenerationStep('Extrayendo muestra limpia del piso (solo esta vez)...');
+              const sourceSubset = floorObj.images.slice(0, 4);
+              const scaledSources = await Promise.all(
+                sourceSubset.map((img) => downscaleDataUrl(img.dataUrl, 1024, 0.85))
+              );
+              const sourceLabels = sourceSubset.map((img) => img.type || img.name);
+
+              let extractedSwatchUrl: string | null = null;
+
+              try {
+                const swatchResp = await fetch('/api/extract-swatch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    floorImages: scaledSources,
+                    floorImageLabels: sourceLabels,
+                    productName: floorTitle,
+                    modelChoice,
+                  }),
+                });
+                if (swatchResp.ok) {
+                  const contentType = swatchResp.headers.get('content-type') || '';
+                  if (contentType.includes('application/json')) {
+                    const swatchData = await swatchResp.json();
+                    if (swatchData?.success && swatchData?.swatchUrl) {
+                      extractedSwatchUrl = swatchData.swatchUrl;
+                    }
+                  }
+                }
+              } catch (swatchBackendErr) {
+                console.warn('Backend /api/extract-swatch unreachable, trying direct Gemini API:', swatchBackendErr);
+              }
+
+              if (!extractedSwatchUrl) {
+                const activeKey = getActiveClientKey();
+                if (!activeKey) {
+                  setIsKeyModalOpen(true);
+                  throw new Error(
+                    'Para generar con Google Nano Banana en GitHub Pages, ingresa tu Gemini API Key tocando "Conectar Clave IA" o comparte el link con ?key=...'
+                  );
+                }
+                const directSwatch = await extractCleanFloorSwatchDirect({
+                  apiKey: activeKey,
+                  floorImages: scaledSources,
+                  floorImageLabels: sourceLabels,
+                  productName: floorTitle,
+                  modelChoice,
+                });
+                extractedSwatchUrl = directSwatch.swatchUrl;
+              }
+
+              const compactSwatch = await downscaleDataUrl(extractedSwatchUrl, 1024, 0.9);
+              const updatedFloor: CustomFloorData = {
+                ...floorObj,
+                cleanSwatchUrl: compactSwatch,
+              };
+
+              setCustomFloors((prev) => {
+                const next = prev.map((f) => (f.id === floorObj.id ? updatedFloor : f));
+                try {
+                  localStorage.setItem('vp_custom_floors', JSON.stringify(next));
+                } catch (e) {
+                  console.warn('Could not persist cached swatch in localStorage:', e);
+                }
+                return next;
+              });
+
+              fetch('/api/floors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedFloor),
+              }).catch(() => {});
+
+              floorImages = [compactSwatch];
+              floorImageLabels = ['Muestra limpia cenital de tablas'];
+            }
+          } else {
+            const validIndices = selectedPhotoIndices.filter((i) => i >= 0 && i < floorObj.images.length);
+            const indicesToSend = (validIndices.length > 0 ? validIndices : [0]).slice(0, 2);
+            floorImages = await Promise.all(
+              indicesToSend.map((i) => downscaleDataUrl(floorObj.images[i].dataUrl, 1024, 0.86))
+            );
+            floorImageLabels = indicesToSend.map(
+              (i) => `${floorObj.images[i].type || floorObj.images[i].name}`
+            );
+          }
         } else {
           floorImages = [selectedProduct.textureUrl];
           floorImageLabels = ['Muestra principal'];
@@ -383,10 +487,15 @@ export default function App() {
         customPrompt: customPrompt.trim(),
       });
 
+      const refModeSummary =
+        activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1
+          ? 'Muestra limpia IA'
+          : `${floorImages.length} foto${floorImages.length > 1 ? 's' : ''}`;
+
       const floorDetailsSummary =
         activeParamCount === 0
-          ? `Modo natural · ${floorImages.length} foto${floorImages.length > 1 ? 's' : ''}`
-          : `${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''} · ${floorImages.length} foto${floorImages.length > 1 ? 's' : ''}`;
+          ? `Modo natural · ${refModeSummary}`
+          : `${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''} · ${refModeSummary}`;
 
       let generatedResult: { imageUrl: string; model: string; promptUsed?: string } | null = null;
 
@@ -760,6 +869,9 @@ export default function App() {
                 availablePhotos={availablePhotos}
                 selectedPhotoIndices={selectedPhotoIndices}
                 onTogglePhotoIndex={handleTogglePhotoIndex}
+                hasCleanSwatch={!!activeCustomFloor?.cleanSwatchUrl}
+                useOptimizedSwatch={useOptimizedSwatch}
+                onToggleOptimizedSwatch={setUseOptimizedSwatch}
                 promptPreview={promptPreview}
                 customPrompt={customPrompt}
                 onChangeCustomPrompt={setCustomPrompt}
@@ -778,7 +890,10 @@ export default function App() {
                     {activeParamCount === 0
                       ? 'Sin parámetros forzados'
                       : `${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''}`}{' '}
-                    · {selectedPhotoIndices.length} foto{selectedPhotoIndices.length > 1 ? 's' : ''} muestra
+                    ·{' '}
+                    {activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1
+                      ? 'Muestra limpia IA'
+                      : `${Math.min(selectedPhotoIndices.length, 2)} foto${selectedPhotoIndices.length > 1 ? 's' : ''} muestra`}
                   </div>
                 </div>
 

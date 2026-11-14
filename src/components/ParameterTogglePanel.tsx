@@ -32,6 +32,9 @@ interface ParameterTogglePanelProps {
   availablePhotos: ReferencePhotoItem[];
   selectedPhotoIndices: number[];
   onTogglePhotoIndex: (idx: number) => void;
+  hasCleanSwatch?: boolean;
+  useOptimizedSwatch?: boolean;
+  onToggleOptimizedSwatch?: (val: boolean) => void;
   promptPreview: string;
   customPrompt: string;
   onChangeCustomPrompt: (val: string) => void;
@@ -76,6 +79,9 @@ export const ParameterTogglePanel: React.FC<ParameterTogglePanelProps> = ({
   availablePhotos,
   selectedPhotoIndices,
   onTogglePhotoIndex,
+  hasCleanSwatch = false,
+  useOptimizedSwatch = true,
+  onToggleOptimizedSwatch,
   promptPreview,
   customPrompt,
   onChangeCustomPrompt,
@@ -154,38 +160,73 @@ export const ParameterTogglePanel: React.FC<ParameterTogglePanelProps> = ({
         </div>
       </div>
 
-      {/* Text-only Reference Photo Selector (no sample thumbnails shown outside Mis Pisos Guardados) */}
-      {availablePhotos.length > 1 && (
-        <div className="p-3 rounded-2xl bg-stone-900/70 border border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <span className="text-xs font-semibold text-stone-200 block">
-              Fotos de este piso a enviar ({selectedPhotoIndices.length} de {availablePhotos.length})
-            </span>
-            <span className="text-[11px] text-stone-400">
-              Por defecto se envía solo la foto #1 para no confundir a la IA
-            </span>
-          </div>
+      {/* Text-only Reference Photo / Swatch Mode Selector (no sample thumbnails shown outside Mis Pisos Guardados) */}
+      {(availablePhotos.length > 1 || hasCleanSwatch) && (
+        <div className="p-3 rounded-2xl bg-stone-900/70 border border-stone-800 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-semibold text-stone-200 block">
+                Referencia de madera para la IA
+              </span>
+              <span className="text-[11px] text-stone-400">
+                {useOptimizedSwatch
+                  ? hasCleanSwatch
+                    ? 'Usa una muestra limpia extraída de tus fotos (evita copiar muebles o techos)'
+                    : 'En la primera pasada sintetiza una muestra pura de tablas y la guarda para las siguientes'
+                  : `Manual: enviando ${selectedPhotoIndices.length} foto${selectedPhotoIndices.length > 1 ? 's' : ''} (máx. 2)`}
+              </span>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {availablePhotos.map((photo, idx) => {
-              const isSelected = selectedPhotoIndices.includes(idx);
-              return (
+            {onToggleOptimizedSwatch && (
+              <div className="flex items-center gap-1 p-1 bg-stone-950 rounded-xl border border-stone-800 self-start sm:self-auto">
                 <button
-                  key={photo.id || idx}
                   type="button"
-                  onClick={() => onTogglePhotoIndex(idx)}
-                  className={`min-h-[36px] px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer tabular-nums ${
-                    isSelected
-                      ? 'bg-amber-600 border-amber-500 text-white font-semibold'
-                      : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+                  onClick={() => onToggleOptimizedSwatch(true)}
+                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    useOptimizedSwatch
+                      ? 'bg-amber-600 text-white font-semibold'
+                      : 'text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  {isSelected && <Check className="w-3 h-3 stroke-[2.5]" />}
-                  <span>Foto {idx + 1}</span>
+                  Muestra limpia IA
                 </button>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => onToggleOptimizedSwatch(false)}
+                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                    !useOptimizedSwatch
+                      ? 'bg-amber-600 text-white font-semibold'
+                      : 'text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  Elegir fotos (máx. 2)
+                </button>
+              </div>
+            )}
           </div>
+
+          {!useOptimizedSwatch && availablePhotos.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-stone-800/80">
+              {availablePhotos.map((photo, idx) => {
+                const isSelected = selectedPhotoIndices.includes(idx);
+                return (
+                  <button
+                    key={photo.id || idx}
+                    type="button"
+                    onClick={() => onTogglePhotoIndex(idx)}
+                    className={`min-h-[36px] px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer tabular-nums ${
+                      isSelected
+                        ? 'bg-amber-600 border-amber-500 text-white font-semibold'
+                        : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 stroke-[2.5]" />}
+                    <span>Foto {idx + 1}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
