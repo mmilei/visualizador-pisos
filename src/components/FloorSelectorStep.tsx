@@ -1,16 +1,19 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { CATALOG_PRODUCTS } from '../data/catalog';
 import { FloorProduct, CustomFloorData } from '../types';
-import { Check, Plus, Trash2, FileText, Layers, Tag } from 'lucide-react';
+import { Check, Plus, Trash2, Tag, Pencil, Download, Upload } from 'lucide-react';
 
 interface FloorSelectorStepProps {
   selectedProduct: FloorProduct | null;
   onSelectProduct: (product: FloorProduct) => void;
   customFloors: CustomFloorData[];
   onOpenAddFloorModal: () => void;
+  onEditCustomFloor: (floor: CustomFloorData) => void;
   onRemoveCustomFloor: (id: string) => void;
   activeTab: 'catalog' | 'custom';
   setActiveTab: (tab: 'catalog' | 'custom') => void;
+  onExportWorkspace?: () => void;
+  onImportWorkspace?: (file: File) => void;
 }
 
 export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
@@ -18,10 +21,15 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
   onSelectProduct,
   customFloors,
   onOpenAddFloorModal,
+  onEditCustomFloor,
   onRemoveCustomFloor,
   activeTab,
   setActiveTab,
+  onExportWorkspace,
+  onImportWorkspace,
 }) => {
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="w-full">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -30,17 +38,17 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
             Paso 2: Selecciona el Piso de Referencia
           </h3>
           <p className="text-xs text-stone-400">
-            Elige un producto de catálogo o registra una ficha de piso propia con sus datos y fotos
+            Elige un piso guardado (o de catálogo) y ajustá abajo qué parámetros entran o salen del prompt
           </p>
         </div>
 
-        {/* Tab switch + Add button */}
+        {/* Tab switch + Add & Sync actions */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 p-1 bg-stone-800 rounded-xl border border-stone-700/80">
             <button
               type="button"
               onClick={() => setActiveTab('custom')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+              className={`min-h-[38px] px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'custom'
                   ? 'bg-amber-700 text-white shadow-sm font-semibold'
                   : 'text-stone-400 hover:text-stone-200'
@@ -51,24 +59,60 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('catalog')}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+              className={`min-h-[38px] px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'catalog'
                   ? 'bg-amber-700 text-white shadow-sm font-semibold'
                   : 'text-stone-400 hover:text-stone-200'
               }`}
             >
-              Catálogo de Muestras ({CATALOG_PRODUCTS.length})
+              Catálogo ({CATALOG_PRODUCTS.length})
             </button>
           </div>
 
           <button
             type="button"
             onClick={onOpenAddFloorModal}
-            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Cargar Ficha de Piso</span>
+            <span>Cargar Piso</span>
           </button>
+
+          {onImportWorkspace && (
+            <>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onImportWorkspace(file);
+                  if (importInputRef.current) importInputRef.current.value = '';
+                }}
+              />
+              {onExportWorkspace && (
+                <button
+                  type="button"
+                  onClick={onExportWorkspace}
+                  className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Exportar pisos e historial de esta API key (.json)"
+                >
+                  <Download className="w-3.5 h-3.5 text-stone-400" />
+                  <span className="hidden md:inline">Respaldar</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-800 text-stone-300 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Importar respaldo .json desde otro dispositivo"
+              >
+                <Upload className="w-3.5 h-3.5 text-stone-400" />
+                <span className="hidden md:inline">Importar</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -88,7 +132,6 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                 }`}
               >
                 <div>
-                  {/* Texture swatch */}
                   <div className="relative aspect-[16/10] w-full rounded-lg overflow-hidden mb-3 bg-stone-950 border border-stone-800 shadow-inner">
                     <img
                       src={prod.textureUrl}
@@ -117,18 +160,14 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                     </h4>
                   </div>
 
-                  <p className="text-[11px] text-stone-400 mb-2 line-clamp-1">
-                    {prod.species}
-                  </p>
+                  <p className="text-[11px] text-stone-400 mb-2 line-clamp-1">{prod.species}</p>
                 </div>
 
                 <div className="pt-2 border-t border-stone-800/80 flex items-center justify-between text-[11px]">
                   <span className="text-stone-300 font-medium truncate max-w-[170px]">
                     {prod.highlightText}
                   </span>
-                  <span className="text-stone-500 tabular-nums shrink-0">
-                    {prod.widthCm} cm
-                  </span>
+                  <span className="text-stone-500 tabular-nums shrink-0">{prod.widthCm} cm</span>
                 </div>
               </div>
             );
@@ -149,12 +188,15 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                 Aún no has registrado ningún piso personalizado
               </h4>
               <p className="text-xs text-stone-400 max-w-md mb-4 leading-relaxed">
-                Registra un piso con su nombre, especie de madera, ancho de tabla y fotos de referencia para guardarlo en tu catálogo y generar su archivo .md para Drive.
+                Registra un piso con sus fotos de referencia y opcionalmente su ficha técnica. Al generar podrás elegir exactamente qué entra en el prompt.
               </p>
               <button
                 type="button"
-                onClick={onOpenAddFloorModal}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenAddFloorModal();
+                }}
+                className="min-h-[42px] px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
                 <span>Registrar Primer Piso</span>
@@ -165,6 +207,7 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
               {customFloors.map((floor) => {
                 const isSelected = selectedProduct?.id === floor.id;
                 const primaryImage = floor.images[0]?.dataUrl || './texturas/roble-eslavonia-hd.jpg';
+                const patternLabel = floor.plankFormat ? floor.plankFormat.toUpperCase() : 'Libre';
 
                 return (
                   <div
@@ -175,13 +218,15 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                         name: floor.name,
                         species: floor.species || 'Piso personalizado',
                         plankFormat: floor.plankFormat,
-                        widthCm: parseFloat(floor.widthCm) || 20,
-                        lengthDescription: floor.widthCm ? `Ancho ${floor.widthCm} cm` : 'Formato personalizado',
-                        finish: floor.finish || 'Personalizado',
+                        widthCm: parseFloat(floor.widthCm) || 0,
+                        lengthDescription: floor.widthCm
+                          ? `Ancho ${floor.widthCm} cm`
+                          : 'Formato libre',
+                        finish: floor.finish || '',
                         textureUrl: primaryImage,
                         toneHex: '#b5651d',
-                        description: floor.notes || 'Piso registrado por el usuario con ficha técnica.',
-                        highlightText: `${floor.plankFormat.toUpperCase()} · ${floor.images.length} fotos`,
+                        description: floor.notes || 'Piso registrado con ficha técnica opcional.',
+                        highlightText: `${patternLabel} · ${floor.images.length} fotos`,
                         isCustom: true,
                         notes: floor.notes,
                       };
@@ -194,7 +239,6 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                     }`}
                   >
                     <div>
-                      {/* Image swatch */}
                       <div className="relative aspect-[16/10] w-full rounded-lg overflow-hidden mb-3 bg-stone-950 border border-stone-800 shadow-inner">
                         <img
                           src={primaryImage}
@@ -208,7 +252,7 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                             </span>
                           </div>
                         )}
-                        <div className="absolute bottom-2 left-2 bg-stone-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-stone-300 font-medium">
+                        <div className="absolute bottom-2 left-2 bg-stone-950/80 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-stone-300 font-medium tabular-nums">
                           {floor.images.length} foto{floor.images.length !== 1 ? 's' : ''}
                         </div>
                       </div>
@@ -220,7 +264,7 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                       </div>
 
                       <p className="text-[11px] text-stone-400 mb-1 line-clamp-1">
-                        {floor.species || 'Madera / Material no especificado'}
+                        {floor.species || 'Material sin especificar'}
                       </p>
 
                       {floor.notes && (
@@ -230,23 +274,39 @@ export const FloorSelectorStep: React.FC<FloorSelectorStepProps> = ({
                       )}
                     </div>
 
-                    <div className="pt-2 border-t border-stone-800/80 flex items-center justify-between text-[11px]">
+                    <div className="pt-2 border-t border-stone-800/80 flex items-center justify-between text-[11px] gap-2">
                       <span className="text-amber-400 font-medium truncate">
                         {floor.cleanSwatchUrl
                           ? 'Muestra limpia lista'
-                          : `Patrón: ${floor.plankFormat.toUpperCase()}`}
+                          : floor.plankFormat
+                            ? `Patrón: ${floor.plankFormat.toUpperCase()}`
+                            : 'Sin patrón fijo'}
                       </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveCustomFloor(floor.id);
-                        }}
-                        className="text-stone-500 hover:text-red-400 p-1 transition-colors"
-                        title="Eliminar piso guardado"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditCustomFloor(floor);
+                          }}
+                          className="min-h-[34px] min-w-[34px] flex items-center justify-center text-stone-400 hover:text-amber-400 rounded-lg hover:bg-stone-800 transition-colors cursor-pointer"
+                          title="Editar ficha y fotos del piso"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRemoveCustomFloor(floor.id);
+                          }}
+                          className="min-h-[34px] min-w-[34px] flex items-center justify-center text-stone-500 hover:text-red-400 rounded-lg hover:bg-stone-800 transition-colors cursor-pointer"
+                          title="Eliminar piso guardado"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

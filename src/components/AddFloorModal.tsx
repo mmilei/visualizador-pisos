@@ -1,30 +1,56 @@
-import React, { useState, useRef } from 'react';
-import { X, Plus, Trash2, Upload, FileText, Check, Copy, Download, Tag } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Plus, Trash2, Upload, FileText, Check, Copy, Download, Tag, RotateCcw } from 'lucide-react';
 import { CustomFloorData, PlankPattern } from '../types';
 import { optimizeImageFile } from '../utils/imageUtils';
 
 interface AddFloorModalProps {
   isOpen: boolean;
+  editingFloor?: CustomFloorData | null;
   onClose: () => void;
   onSaveFloor: (floor: CustomFloorData) => void;
 }
 
 export const AddFloorModal: React.FC<AddFloorModalProps> = ({
   isOpen,
+  editingFloor = null,
   onClose,
   onSaveFloor,
 }) => {
   const [name, setName] = useState('');
   const [species, setSpecies] = useState('');
-  const [plankFormat, setPlankFormat] = useState<PlankPattern>('recto');
+  const [plankFormat, setPlankFormat] = useState<PlankPattern>('');
   const [widthCm, setWidthCm] = useState('');
   const [finish, setFinish] = useState('');
   const [notes, setNotes] = useState('');
   const [images, setImages] = useState<{ id: string; name: string; dataUrl: string; type: string }[]>([]);
+  const [resetSwatch, setResetSwatch] = useState(false);
   const [copiedMd, setCopiedMd] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (editingFloor) {
+      setName(editingFloor.name || '');
+      setSpecies(editingFloor.species || '');
+      setPlankFormat(editingFloor.plankFormat || '');
+      setWidthCm(editingFloor.widthCm || '');
+      setFinish(editingFloor.finish || '');
+      setNotes(editingFloor.notes || '');
+      setImages(editingFloor.images || []);
+      setResetSwatch(false);
+    } else {
+      setName('');
+      setSpecies('');
+      setPlankFormat('');
+      setWidthCm('');
+      setFinish('');
+      setNotes('');
+      setImages([]);
+      setResetSwatch(false);
+    }
+  }, [isOpen, editingFloor]);
 
   if (!isOpen) return null;
 
@@ -43,7 +69,7 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
             id: `img-${Date.now()}-${i}`,
             name: file.name.replace(/\.[^/.]+$/, ''),
             dataUrl,
-            type: prev.length === 0 ? 'Primer plano (veta)' : 'Piso instalado',
+            type: prev.length === 0 ? 'Primer plano (veta y poro)' : 'Piso colocado / instalado',
           },
         ]);
       }
@@ -56,12 +82,13 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
   };
 
   const generateMarkdown = () => {
+    const patternLabel = plankFormat ? plankFormat.toUpperCase() : 'Sin especificar (Libre)';
     const lines = [
       `# ${name || 'Nombre del Piso'}`,
       '',
       `## Ficha Técnica del Piso`,
       `- **Especie / Material:** ${species || 'No especificado'}`,
-      `- **Patrón de Colocación:** ${plankFormat.toUpperCase()}`,
+      `- **Patrón de Colocación:** ${patternLabel}`,
       `- **Ancho de Tabla:** ${widthCm ? `${widthCm} cm` : 'No especificado'}`,
       `- **Acabado:** ${finish || 'No especificado'}`,
       `- **Fecha de Registro:** ${new Date().toISOString().split('T')[0]}`,
@@ -104,8 +131,13 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    const newFloor: CustomFloorData = {
-      id: `custom-floor-${Date.now()}`,
+    const imagesChanged = editingFloor
+      ? images.length !== editingFloor.images.length ||
+        images.some((img, i) => img.id !== editingFloor.images[i]?.id)
+      : false;
+
+    const savedFloor: CustomFloorData = {
+      id: editingFloor?.id || `custom-floor-${Date.now()}`,
       name: name.trim(),
       species: species.trim(),
       plankFormat,
@@ -113,10 +145,13 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
       finish: finish.trim(),
       notes: notes.trim(),
       images,
-      createdAt: Date.now(),
+      cleanSwatchUrl:
+        editingFloor && !resetSwatch && !imagesChanged ? editingFloor.cleanSwatchUrl : undefined,
+      apiKeyId: editingFloor?.apiKeyId,
+      createdAt: editingFloor?.createdAt || Date.now(),
     };
 
-    onSaveFloor(newFloor);
+    onSaveFloor(savedFloor);
     onClose();
   };
 
@@ -128,13 +163,18 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
           <div className="flex items-center gap-2">
             <Tag className="w-5 h-5 text-amber-500" />
             <div>
-              <h3 className="text-base font-bold text-stone-100">Registrar Ficha de Piso</h3>
-              <p className="text-[11px] text-stone-400">Guarda los datos técnicos del piso y prepara la ficha .md para Drive</p>
+              <h3 className="text-base font-bold text-stone-100">
+                {editingFloor ? 'Editar Ficha de Piso' : 'Registrar Ficha de Piso'}
+              </h3>
+              <p className="text-[11px] text-stone-400">
+                Todos los parámetros son opcionales; luego al generar podés decidir cuáles quedan Adentro o Afuera del prompt
+              </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-100 rounded-lg hover:bg-stone-800 transition-colors cursor-pointer"
+            className="min-h-[40px] min-w-[40px] flex items-center justify-center text-stone-400 hover:text-stone-100 rounded-lg hover:bg-stone-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -151,10 +191,10 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
             onChange={handleImageUpload}
           />
 
-          {/* Nombre Obligatorio */}
+          {/* Nombre del piso */}
           <div>
             <label className="block text-xs font-semibold text-stone-200 mb-1">
-              Nombre o Modelo del Piso <span className="text-amber-400">*</span>
+              Nombre o Referencia del Piso <span className="text-amber-400">*</span>
             </label>
             <input
               type="text"
@@ -187,7 +227,7 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
               </label>
               <input
                 type="text"
-                placeholder="Ej: 20 cm, 10.2 cm, 35.6 cm..."
+                placeholder="Ej: 20, 10.2, 35.6..."
                 value={widthCm}
                 onChange={(e) => setWidthCm(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-700 focus:border-amber-500 focus:outline-none text-stone-100 placeholder:text-stone-500 text-xs"
@@ -199,13 +239,14 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-stone-200 mb-1">
-                Patrón de Colocación
+                Patrón de Colocación (Opcional)
               </label>
               <select
                 value={plankFormat}
                 onChange={(e) => setPlankFormat(e.target.value as PlankPattern)}
                 className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-700 focus:border-amber-500 focus:outline-none text-stone-100 text-xs cursor-pointer"
               >
+                <option value="">Sin especificar / Libre</option>
                 <option value="recto">Tablas Rectas (Paralelo)</option>
                 <option value="chevron">Chevron (Espiga a 45° Francesa)</option>
                 <option value="espiga">Herringbone (Espiga a 90° Clásica)</option>
@@ -234,7 +275,7 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
             </label>
             <textarea
               rows={2}
-              placeholder="Ej: Selección rústica con nudos. Apto losa radiante. Tonos canela claro."
+              placeholder="Ej: Selección rústica con nudos. Tonos canela claro. Bisel fino en 4 lados."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="w-full px-3.5 py-2 rounded-xl bg-stone-950 border border-stone-700 focus:border-amber-500 focus:outline-none text-stone-100 placeholder:text-stone-500 text-xs resize-none"
@@ -242,21 +283,38 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
           </div>
 
           {/* Fotos de referencia del piso */}
-          <div className="p-3.5 rounded-2xl bg-stone-950/70 border border-stone-800">
-            <div className="flex items-center justify-between mb-2">
+          <div className="p-3.5 rounded-2xl bg-stone-950/70 border border-stone-800 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-stone-200 block">Fotos de Referencia del Piso ({images.length})</span>
-                <span className="text-[11px] text-stone-400">Agrega fotos de close-up o piso colocado para este producto</span>
+                <span className="font-semibold text-stone-200 block">
+                  Fotos de Referencia del Piso ({images.length})
+                </span>
+                <span className="text-[11px] text-stone-400">
+                  Subí 1 a 4 (o más) fotos de close-up, obra o catálogo para combinarlas al generar
+                </span>
               </div>
-              <button
-                type="button"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Subir Foto</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {editingFloor?.cleanSwatchUrl && !resetSwatch && (
+                  <button
+                    type="button"
+                    onClick={() => setResetSwatch(true)}
+                    className="min-h-[36px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                    title="Limpiar la muestra sintetizada previamente"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Limpiar muestra IA</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="min-h-[36px] px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isUploading ? 'Cargando...' : 'Subir Foto'}</span>
+                </button>
+              </div>
             </div>
 
             {images.length === 0 ? (
@@ -266,18 +324,23 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
               >
                 <Upload className="w-6 h-6 text-amber-500 mx-auto mb-1.5 opacity-80" />
                 <p className="font-medium text-stone-200">Haz clic para adjuntar 1 o más fotos de este piso</p>
-                <p className="text-[10px] text-stone-500 mt-0.5">Puedes subir un close-up de la madera, una foto del piso colocado, etc.</p>
+                <p className="text-[10px] text-stone-500 mt-0.5">
+                  Podés subir fotos sacadas con el celular en obra, catálogo o close-ups de la veta.
+                </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
                 {images.map((img, idx) => (
-                  <div key={img.id} className="relative rounded-xl overflow-hidden border border-stone-800 bg-stone-900 flex flex-col">
+                  <div
+                    key={img.id}
+                    className="relative rounded-xl overflow-hidden border border-stone-800 bg-stone-900 flex flex-col"
+                  >
                     <div className="relative aspect-[16/10] w-full bg-stone-950">
                       <img src={img.dataUrl} alt={img.name} className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-stone-950/80 hover:bg-red-950 text-stone-300 hover:text-red-400 transition-colors"
+                        className="absolute top-1.5 right-1.5 p-1.5 rounded-md bg-stone-950/85 hover:bg-red-950 text-stone-300 hover:text-red-400 transition-colors cursor-pointer"
                         title="Eliminar foto"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -307,7 +370,6 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
                   </div>
                 ))}
 
-                {/* Botón para sumar más fotos */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -326,7 +388,7 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-semibold text-stone-300 flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 text-amber-500" />
-                <span>Vista Previa del Archivo .md (para tu Drive):</span>
+                <span>Vista Previa Ficha .md</span>
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -357,16 +419,16 @@ export const AddFloorModal: React.FC<AddFloorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-medium transition-colors cursor-pointer"
+              className="min-h-[42px] px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-medium transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={!name.trim()}
-              className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
+              className="min-h-[42px] px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
             >
-              Guardar Piso y Seleccionar
+              {editingFloor ? 'Guardar Cambios' : 'Guardar Piso y Seleccionar'}
             </button>
           </div>
         </form>

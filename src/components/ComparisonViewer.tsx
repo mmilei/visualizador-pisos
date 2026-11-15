@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ChatRefinementMessage,
   FloorModelChoice,
+  FloorQualityPreset,
   TransformationResult,
 } from '../types';
 import {
@@ -17,19 +18,31 @@ import {
   AlertCircle,
   MessageSquare,
   Check,
+  Sparkles,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface ComparisonViewerProps {
   result: TransformationResult;
   modelChoice: FloorModelChoice;
-  onChangeModelChoice: (model: FloorModelChoice) => void;
+  imageSize: FloorQualityPreset;
+  onSelectModelAndQuality: (model: FloorModelChoice, size: FloorQualityPreset) => void;
   onRefineResult: (options: {
     baseImageUrl: string;
     instruction: string;
     includeReference: boolean;
+    rawMode: boolean;
   }) => Promise<void>;
-  onSelectVersion: (imageUrl: string, modelUsed: string) => void;
+  onUpgradeTo2K: () => Promise<void>;
+  onSelectVersion: (
+    imageUrl: string,
+    modelUsed: string,
+    imageSize?: FloorQualityPreset
+  ) => void;
   isRefining: boolean;
+  isUpgrading2K: boolean;
   refineError: string | null;
   onTryAnotherFloor: () => void;
   onResetAll: () => void;
@@ -47,10 +60,13 @@ const QUICK_CORRECTIONS = [
 export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   result,
   modelChoice,
-  onChangeModelChoice,
+  imageSize,
+  onSelectModelAndQuality,
   onRefineResult,
+  onUpgradeTo2K,
   onSelectVersion,
   isRefining,
+  isUpgrading2K,
   refineError,
   onTryAnotherFloor,
   onResetAll,
@@ -63,6 +79,10 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
   const [isApproved, setIsApproved] = useState(false);
 
   const [chatInput, setChatInput] = useState('');
+  const [rawChatMode, setRawChatMode] = useState(false);
+  const [expandedTraceIds, setExpandedTraceIds] = useState<Record<string, boolean>>({});
+  const [roomAspectRatioCss, setRoomAspectRatioCss] = useState<string>('4 / 3');
+  const [sliderWidthPx, setSliderWidthPx] = useState<number>(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -78,24 +98,23 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             text: `Listo, así quedó "${result.floorTitle}". ¿Así está bien o querés cambiar algo?`,
             imageUrl: result.resultImageUrl,
             modelUsed: result.modelUsed,
+            imageSize: result.imageSize,
             versionNumber: 1,
+            traceEntry: result.initialTraceEntry,
             timestamp: result.timestamp,
           },
         ];
 
-  // Reset approval when image changes
   useEffect(() => {
     setIsApproved(false);
   }, [result.resultImageUrl]);
 
-  // Scroll message list gently when new messages arrive (not on initial mount so user sees the top image first)
   useEffect(() => {
     if (messages.length > 1 || isRefining) {
       chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [messages.length, isRefining]);
 
-  // Exit fullscreen on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isFullscreen) {
@@ -105,6 +124,21 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
+
+  // Keep slider overlay image aligned 1:1 with containerRef width across resizes & fullscreen
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateWidth = () => setSliderWidthPx(el.clientWidth);
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateWidth);
+      observer.observe(el);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [viewMode, isFullscreen, roomAspectRatioCss]);
 
   const handleMove = (clientX: number) => {
     if (!containerRef.current) return;
@@ -135,15 +169,30 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
   const handleSendInstruction = async (textToSend?: string) => {
     const clean = (textToSend ?? chatInput).trim();
-    if (!clean || isRefining) return;
+    if (!clean || isRefining || isUpgrading2K) return;
     if (!textToSend) setChatInput('');
     setIsApproved(false);
 
     await onRefineResult({
       baseImageUrl: result.resultImageUrl,
       instruction: clean,
-      includeReference: false,
+      includeReference: true,
+      rawMode: rawChatMode,
     });
+  };
+
+  const canUpgradeTo2K =
+    result.modelUsed === 'gemini-3.1-flash-lite-image' || result.imageSize === '1K';
+
+  const activeChatPreset =
+    modelChoice === 'gemini-3.1-flash-lite-image'
+      ? 'lite'
+      : imageSize === '1K'
+        ? '1k'
+        : '2k';
+
+  const toggleTrace = (id: string) => {
+    setExpandedTraceIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -162,6 +211,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
           </h3>
           <p className="text-xs text-stone-400 mt-0.5 truncate tabular-nums">
             {result.floorDetails} · {result.modelUsed}
+            {result.imageSize ? ` (${result.imageSize})` : ''}
           </p>
         </div>
 
@@ -205,6 +255,23 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             </button>
           </div>
 
+          {canUpgradeTo2K && (
+            <button
+              type="button"
+              disabled={isUpgrading2K || isRefining}
+              onClick={onUpgradeTo2K}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-xs font-bold text-white flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-md"
+              title="Re-renderizar este resultado borrador en resolución nativa 2K con Nano Banana 2.1"
+            >
+              {isUpgrading2K ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span>{isUpgrading2K ? 'Escalando a 2K...' : 'Escalar a NB 2.1 (2K)'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsFullscreen(!isFullscreen)}
@@ -230,7 +297,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
         </div>
       </div>
 
-      {/* Main Split Grid: Image Stage (left) + Confirmation & Chat (right / directly under image on mobile) */}
+      {/* Main Split Grid: Image Stage + Confirmation & Chat */}
       <div
         className={
           isFullscreen
@@ -241,12 +308,12 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
         {/* Image Stage */}
         <div
           className={`${
-            isFullscreen ? 'flex-1 min-h-[65vh]' : 'lg:col-span-7 flex flex-col gap-3'
+            isFullscreen ? 'flex-1 min-h-[65vh] flex items-center justify-center' : 'lg:col-span-7 flex flex-col gap-3'
           }`}
         >
           <div
-            className={`relative rounded-2xl border border-stone-800 bg-stone-950 overflow-hidden shadow-2xl ${
-              isFullscreen ? 'h-full min-h-[65vh]' : ''
+            className={`relative rounded-2xl border border-stone-800 bg-stone-950 overflow-hidden shadow-2xl flex items-center justify-center ${
+              isFullscreen ? 'w-full h-full min-h-[65vh]' : 'w-full'
             }`}
           >
             {viewMode === 'slider' && (
@@ -259,13 +326,20 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                 onTouchStart={() => setIsDragging(true)}
                 onTouchEnd={() => setIsDragging(false)}
                 onTouchMove={handleTouchMove}
+                style={{ aspectRatio: roomAspectRatioCss }}
                 className={`relative w-full ${
-                  isFullscreen ? 'h-full min-h-[65vh]' : 'aspect-[4/3] max-h-[48vh] lg:max-h-[580px]'
-                } select-none cursor-ew-resize overflow-hidden`}
+                  isFullscreen ? 'max-h-[78vh] max-w-full' : 'max-h-[56vh] lg:max-h-[620px]'
+                } select-none cursor-ew-resize overflow-hidden bg-stone-950`}
               >
                 <img
                   src={result.roomImageUrl}
                   alt="Ambiente Original"
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                      setRoomAspectRatioCss(`${img.naturalWidth} / ${img.naturalHeight}`);
+                    }
+                  }}
                   className="absolute inset-0 w-full h-full object-contain pointer-events-none"
                 />
 
@@ -276,9 +350,9 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                   <img
                     src={result.resultImageUrl}
                     alt="Ambiente con nuevo piso"
-                    className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                    className="absolute inset-0 h-full object-contain pointer-events-none"
                     style={{
-                      width: containerRef.current ? `${containerRef.current.clientWidth}px` : '100%',
+                      width: sliderWidthPx > 0 ? `${sliderWidthPx}px` : '100%',
                       maxWidth: 'none',
                     }}
                   />
@@ -303,7 +377,10 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             )}
 
             {viewMode === 'toggle' && (
-              <div className="relative w-full aspect-[4/3] max-h-[48vh] lg:max-h-[580px] flex items-center justify-center bg-stone-950">
+              <div
+                style={{ aspectRatio: roomAspectRatioCss }}
+                className="relative w-full max-h-[56vh] lg:max-h-[620px] flex items-center justify-center bg-stone-950"
+              >
                 <img
                   src={showOriginalInToggle ? result.roomImageUrl : result.resultImageUrl}
                   alt="Vista alternada"
@@ -314,6 +391,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                     type="button"
                     onMouseDown={() => setShowOriginalInToggle(true)}
                     onMouseUp={() => setShowOriginalInToggle(false)}
+                    onMouseLeave={() => setShowOriginalInToggle(false)}
                     onTouchStart={() => setShowOriginalInToggle(true)}
                     onTouchEnd={() => setShowOriginalInToggle(false)}
                     className="min-h-[44px] px-4 py-2 rounded-xl bg-stone-900/90 backdrop-blur-md border border-amber-500/50 text-amber-300 text-xs font-bold shadow-lg hover:bg-stone-900 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
@@ -326,10 +404,13 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             )}
 
             {viewMode === 'side-by-side' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-stone-800">
+              <div className="w-full grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-stone-800">
                 <div className="p-3 flex flex-col items-center">
                   <span className="text-xs font-semibold text-stone-400 mb-2">Original</span>
-                  <div className="aspect-[4/3] w-full bg-stone-950 flex items-center justify-center overflow-hidden rounded-xl">
+                  <div
+                    style={{ aspectRatio: roomAspectRatioCss }}
+                    className="w-full max-h-[46vh] bg-stone-950 flex items-center justify-center overflow-hidden rounded-xl"
+                  >
                     <img
                       src={result.roomImageUrl}
                       alt="Original"
@@ -338,8 +419,13 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                   </div>
                 </div>
                 <div className="p-3 flex flex-col items-center">
-                  <span className="text-xs font-semibold text-amber-400 mb-2">Con {result.floorTitle}</span>
-                  <div className="aspect-[4/3] w-full bg-stone-950 flex items-center justify-center overflow-hidden rounded-xl">
+                  <span className="text-xs font-semibold text-amber-400 mb-2">
+                    Con {result.floorTitle}
+                  </span>
+                  <div
+                    style={{ aspectRatio: roomAspectRatioCss }}
+                    className="w-full max-h-[46vh] bg-stone-950 flex items-center justify-center overflow-hidden rounded-xl"
+                  >
                     <img
                       src={result.resultImageUrl}
                       alt="Resultado"
@@ -354,9 +440,9 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
         {/* Immediate Confirmation & Conversational Refinement Chat Panel */}
         {!isFullscreen && (
-          <div className="lg:col-span-5 rounded-2xl bg-stone-900 border border-amber-700/50 shadow-xl flex flex-col overflow-hidden lg:min-h-[460px] lg:max-h-[680px]">
+          <div className="lg:col-span-5 rounded-2xl bg-stone-900 border border-amber-700/50 shadow-xl flex flex-col overflow-hidden lg:min-h-[480px] lg:max-h-[680px]">
             {/* Chat Header */}
-            <div className="p-3.5 border-b border-stone-800 bg-stone-950/70 flex items-center justify-between gap-2">
+            <div className="p-3.5 border-b border-stone-800 bg-stone-950/70 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <MessageSquare className="w-4 h-4 text-amber-400 shrink-0" />
                 <div className="min-w-0">
@@ -364,29 +450,40 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                     ¿Así está bien o querés cambiar algo?
                   </h4>
                   <p className="text-[11px] text-stone-400 truncate">
-                    Chat directo para modificar esta imagen
+                    Chat multi-turno con memoria sobre esta foto
                   </p>
                 </div>
               </div>
 
-              {/* Model selector for chat edits */}
+              {/* Model + Quality selector for chat edits */}
               <div className="flex items-center gap-0.5 p-0.5 bg-stone-900 rounded-lg border border-stone-800 shrink-0">
                 <button
                   type="button"
-                  onClick={() => onChangeModelChoice('gemini-nano-banana-2.1')}
-                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer ${
-                    modelChoice === 'gemini-nano-banana-2.1'
+                  onClick={() => onSelectModelAndQuality('gemini-nano-banana-2.1', '2K')}
+                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer tabular-nums ${
+                    activeChatPreset === '2k'
                       ? 'bg-amber-600 text-white font-semibold'
                       : 'text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  NB 2.1
+                  2.1·2K
                 </button>
                 <button
                   type="button"
-                  onClick={() => onChangeModelChoice('gemini-3.1-flash-lite-image')}
+                  onClick={() => onSelectModelAndQuality('gemini-nano-banana-2.1', '1K')}
+                  className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer tabular-nums ${
+                    activeChatPreset === '1k'
+                      ? 'bg-amber-600 text-white font-semibold'
+                      : 'text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  2.1·1K
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectModelAndQuality('gemini-3.1-flash-lite-image', '1K')}
                   className={`px-2 py-1 text-[10px] font-medium rounded-md transition-colors cursor-pointer ${
-                    modelChoice === 'gemini-3.1-flash-lite-image'
+                    activeChatPreset === 'lite'
                       ? 'bg-amber-600 text-white font-semibold'
                       : 'text-stone-400 hover:text-stone-200'
                   }`}
@@ -396,7 +493,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
               </div>
             </div>
 
-            {/* Quick Decision Prompt Bar ("Así está bien" vs "Quiero cambiar algo") */}
+            {/* Quick Decision Prompt Bar */}
             <div className="px-3.5 py-2.5 border-b border-stone-800/80 bg-stone-950/40 flex items-center gap-2">
               <button
                 type="button"
@@ -438,69 +535,123 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
             )}
 
             {/* Chat Message Thread */}
-            <div className="flex-1 max-h-[260px] lg:max-h-none overflow-y-auto p-3.5 space-y-3 text-xs">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
+            <div className="flex-1 max-h-[280px] lg:max-h-none overflow-y-auto p-3.5 space-y-3 text-xs">
+              {messages.map((msg) => {
+                const trace = msg.traceEntry || (msg.versionNumber === 1 ? result.initialTraceEntry : undefined);
+                const isTraceOpen = Boolean(expandedTraceIds[msg.id]);
+
+                return (
                   <div
-                    className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-amber-700 text-white rounded-br-sm'
-                        : 'bg-stone-950 border border-stone-800 text-stone-200 rounded-bl-sm'
-                    }`}
+                    key={msg.id}
+                    className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
-                    <p>{msg.text}</p>
+                    <div
+                      className={`max-w-[94%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-amber-700 text-white rounded-br-sm'
+                          : 'bg-stone-950 border border-stone-800 text-stone-200 rounded-bl-sm'
+                      }`}
+                    >
+                      <p>{msg.text}</p>
 
-                    {msg.imageUrl && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onSelectVersion(
-                            msg.imageUrl!,
-                            msg.modelUsed || result.modelUsed
-                          )
-                        }
-                        className={`mt-2 w-full rounded-xl overflow-hidden border transition-all cursor-pointer block text-left ${
-                          result.resultImageUrl === msg.imageUrl
-                            ? 'border-amber-500 ring-2 ring-amber-500/30'
-                            : 'border-stone-800 hover:border-stone-600 opacity-80 hover:opacity-100'
-                        }`}
-                      >
-                        <img
-                          src={msg.imageUrl}
-                          alt={`Versión ${msg.versionNumber || ''}`}
-                          className="w-full h-24 object-cover"
-                        />
-                        <div className="px-2.5 py-1.5 bg-stone-900/90 flex items-center justify-between text-[10px] text-stone-300 tabular-nums">
-                          <span className="font-semibold">
-                            Versión {msg.versionNumber || 1}
-                          </span>
-                          <span>
-                            {result.resultImageUrl === msg.imageUrl
-                              ? 'Activa en el visor'
-                              : 'Ver en visor'}
-                          </span>
+                      {msg.imageUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onSelectVersion(
+                              msg.imageUrl!,
+                              msg.modelUsed || result.modelUsed,
+                              msg.imageSize
+                            )
+                          }
+                          className={`mt-2 w-full rounded-xl overflow-hidden border transition-all cursor-pointer block text-left ${
+                            result.resultImageUrl === msg.imageUrl
+                              ? 'border-amber-500 ring-2 ring-amber-500/30'
+                              : 'border-stone-800 hover:border-stone-600 opacity-80 hover:opacity-100'
+                          }`}
+                        >
+                          <img
+                            src={msg.imageUrl}
+                            alt={`Versión ${msg.versionNumber || ''}`}
+                            className="w-full h-24 object-cover"
+                          />
+                          <div className="px-2.5 py-1.5 bg-stone-900/90 flex items-center justify-between text-[10px] text-stone-300 tabular-nums">
+                            <span className="font-semibold">
+                              Versión {msg.versionNumber || 1}
+                              {msg.imageSize ? ` · ${msg.imageSize}` : ''}
+                            </span>
+                            <span>
+                              {result.resultImageUrl === msg.imageUrl
+                                ? 'Activa en el visor'
+                                : 'Ver en visor'}
+                            </span>
+                          </div>
+                        </button>
+                      )}
+
+                      {trace && (
+                        <div className="mt-2 pt-2 border-t border-stone-800/80">
+                          <button
+                            type="button"
+                            onClick={() => toggleTrace(msg.id)}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <Terminal className="w-3 h-3" />
+                            <span>Ver prompt e imágenes enviadas</span>
+                            {isTraceOpen ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )}
+                          </button>
+
+                          {isTraceOpen && (
+                            <div className="mt-2 p-2 rounded-lg bg-stone-900 border border-stone-800 font-mono text-[10px] text-stone-300 space-y-1.5">
+                              <div className="text-stone-400 tabular-nums">
+                                {trace.stage} · {trace.model}
+                                {trace.imageSize ? ` · ${trace.imageSize}` : ''}
+                                {trace.durationMs ? ` · ${(trace.durationMs / 1000).toFixed(1)}s` : ''}
+                                {trace.usedConversationHistory ? ' · multi-turno' : ''}
+                              </div>
+                              {trace.imageRoles.length > 0 && (
+                                <div className="space-y-0.5 text-stone-400">
+                                  {trace.imageRoles.map((r, idx) => (
+                                    <div key={idx} className="truncate" title={r}>
+                                      • {r}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <pre className="whitespace-pre-wrap break-words text-stone-200 pt-1 border-t border-stone-800 leading-relaxed">
+                                {trace.promptText}
+                              </pre>
+                            </div>
+                          )}
                         </div>
-                      </button>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-stone-500 mt-1 px-1 tabular-nums">
-                    {new Date(msg.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                    {msg.modelUsed ? ` · ${msg.modelUsed}` : ''}
-                  </span>
-                </div>
-              ))}
+                      )}
+                    </div>
 
-              {isRefining && (
+                    <span className="text-[10px] text-stone-500 mt-1 px-1 tabular-nums">
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      {msg.modelUsed ? ` · ${msg.modelUsed}` : ''}
+                      {msg.imageSize ? ` (${msg.imageSize})` : ''}
+                    </span>
+                  </div>
+                );
+              })}
+
+              {(isRefining || isUpgrading2K) && (
                 <div className="flex items-start">
                   <div className="rounded-2xl rounded-bl-sm bg-stone-950 border border-stone-800 px-3.5 py-2.5 text-stone-300 flex items-center gap-2">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                    <span>Aplicando corrección sobre esta imagen...</span>
+                    <span>
+                      {isUpgrading2K
+                        ? 'Re-renderizando en Nano Banana 2.1 (2K)...'
+                        : 'Aplicando corrección sobre esta imagen...'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -521,7 +672,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                 <button
                   key={q}
                   type="button"
-                  disabled={isRefining}
+                  disabled={isRefining || isUpgrading2K}
                   onClick={() => handleSendInstruction(q)}
                   className="min-h-[34px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-40 text-stone-300 text-[11px] whitespace-nowrap shrink-0 transition-colors cursor-pointer"
                 >
@@ -532,6 +683,15 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
 
             {/* Chat Composer */}
             <div className="p-3 border-t border-stone-800 bg-stone-950/80 space-y-2">
+              <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[11px] text-stone-400 hover:text-stone-200">
+                <input
+                  type="checkbox"
+                  checked={rawChatMode}
+                  onChange={(e) => setRawChatMode(e.target.checked)}
+                  className="rounded border-stone-700 bg-stone-900 text-amber-600 focus:ring-amber-500"
+                />
+                <span>Enviar texto literal sin envoltorio (modo chat puro)</span>
+              </label>
 
               <div className="flex items-end gap-2">
                 <textarea
@@ -545,12 +705,12 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
                       handleSendInstruction();
                     }
                   }}
-                  placeholder="Escribí qué cambiar (ej: girá las tablas 90°, hacelas más anchas, tono más mate)..."
+                  placeholder="Escribí qué cambiar (ej: girá las tablas 90°, tono más natural, quitá brillo)..."
                   className="flex-1 px-3 py-2 rounded-xl bg-stone-900 border border-stone-700/80 focus:border-amber-500 focus:outline-none text-xs text-stone-100 placeholder:text-stone-500 resize-none leading-relaxed"
                 />
                 <button
                   type="button"
-                  disabled={!chatInput.trim() || isRefining}
+                  disabled={!chatInput.trim() || isRefining || isUpgrading2K}
                   onClick={() => handleSendInstruction()}
                   className="min-h-[44px] min-w-[44px] px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 disabled:opacity-40 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0"
                   aria-label="Enviar corrección"
@@ -568,7 +728,7 @@ export const ComparisonViewer: React.FC<ComparisonViewerProps> = ({
       {!isFullscreen && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-stone-900 border border-stone-800">
           <div className="text-xs text-stone-400">
-            Cada corrección se aplica directo sobre la versión activa del visor. Puedes volver a versiones anteriores tocando su miniatura en el chat.
+            Cada corrección conserva el contexto de la conversación. Tocá una miniatura en el chat para volver a esa versión o escalar un borrador a 2K.
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">

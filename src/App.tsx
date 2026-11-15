@@ -15,55 +15,76 @@ import {
   CustomFloorData,
   TransformationResult,
   FloorModelChoice,
+  FloorQualityPreset,
+  PipelineFlowMode,
+  PromptStrategyId,
+  ReferenceSelectionMode,
   FloorParametersConfig,
   ChatRefinementMessage,
+  SavedPromptPreset,
+  PromptTraceEntry,
 } from './types';
 import { urlToDataUrl, downscaleDataUrl } from './utils/imageUtils';
+import { deriveApiKeyId } from './utils/apiKeyHash';
 import {
   extractCleanFloorSwatchDirect,
   generateWithGoogleNanoBanana,
+  MultiTurnHistoryTurn,
   refineWithGoogleNanoBanana,
+  upgradeTo2KWithGoogleNanoBanana,
 } from './utils/geminiDirect';
 import {
   DEFAULT_FLOOR_PARAMETERS,
   createInitialFloorParameters,
   buildCleanFloorPrompt,
+  selectBestReferenceIndices,
 } from './utils/promptBuilder';
 import { Sparkles, RefreshCw, AlertCircle, ArrowRight, Smartphone, Key } from 'lucide-react';
 
 function sanitizeError(err: any): string {
-  const str = typeof err === 'string' ? err : (err?.message || JSON.stringify(err) || '');
-  if (str.includes('429') || str.includes('RESOURCE_EXHAUSTED') || str.includes('quota') || str.includes('limit exceeded')) {
-    return 'Límite de cuota o saldo alcanzado en la API de Google Gemini Imagen. Los modelos fotorrealistas Nano Banana requieren asociar facturación activa (Pay-as-you-go) en Google AI Studio (~$0.03 por imagen).';
+  const str = typeof err === 'string' ? err : err?.message || JSON.stringify(err) || '';
+  if (
+    str.includes('429') ||
+    str.includes('RESOURCE_EXHAUSTED') ||
+    str.includes('quota') ||
+    str.includes('limit exceeded')
+  ) {
+    return 'Límite de cuota o saldo alcanzado en la API de Google Gemini Imagen. Los modelos fotorrealistas Nano Banana requieren facturación activa (Pay-as-you-go) en Google AI Studio.';
   }
   try {
     const parsed = JSON.parse(str);
-    if (parsed.error?.message) {
-      return sanitizeError(parsed.error.message);
-    }
-    if (parsed.error && typeof parsed.error === 'string') {
-      return sanitizeError(parsed.error);
-    }
-  } catch (e) {}
+    if (parsed.error?.message) return sanitizeError(parsed.error.message);
+    if (parsed.error && typeof parsed.error === 'string') return sanitizeError(parsed.error);
+  } catch {
+    // ignore parse failure
+  }
   return str.replace(/^Error:\s*/, '');
 }
 
 function asProductFromCustom(floor: CustomFloorData): FloorProduct {
+  const patternLabel = floor.plankFormat ? floor.plankFormat.toUpperCase() : 'Libre';
   return {
     id: floor.id,
     name: floor.name,
     species: floor.species || 'Piso personalizado',
     plankFormat: floor.plankFormat,
-    widthCm: parseFloat(floor.widthCm) || 20,
-    lengthDescription: floor.widthCm ? `Ancho ${floor.widthCm} cm` : 'Formato personalizado',
-    finish: floor.finish || 'Personalizado',
+    widthCm: parseFloat(floor.widthCm) || 0,
+    lengthDescription: floor.widthCm ? `Ancho ${floor.widthCm} cm` : 'Formato libre',
+    finish: floor.finish || '',
     textureUrl: floor.images[0]?.dataUrl || './texturas/roble-eslavonia-hd.jpg',
     toneHex: '#b5651d',
-    description: floor.notes || 'Piso registrado por el usuario con ficha técnica.',
-    highlightText: `${floor.plankFormat.toUpperCase()} · ${floor.images.length} fotos`,
+    description: floor.notes || 'Piso registrado con ficha técnica opcional.',
+    highlightText: `${patternLabel} · ${floor.images.length} fotos`,
     isCustom: true,
     notes: floor.notes,
   };
+}
+
+function mergeById<T extends { id: string }>(primary: T[], secondary: T[]): T[] {
+  const map = new Map<string, T>();
+  for (const item of secondary) map.set(item.id, item);
+  for (const item of primary) map.set(item.id, item);
+  return Array.from(map.values());
 }
 
 export default function App() {
@@ -74,22 +95,36 @@ export default function App() {
   const [customFloors, setCustomFloors] = useState<CustomFloorData[]>([]);
   const [activeTab, setActiveTab] = useState<'catalog' | 'custom'>('custom');
 
-  // All placement/style constraints start OFF so the model applies the reference cleanly unless opted in
+  // Flow, Model, Quality & Reference selection
+  const [pipelineMode, setPipelineMode] = useState<PipelineFlowMode>('direct');
+  const [modelChoice, setModelChoice] = useState<FloorModelChoice>('gemini-nano-banana-2.1');
+  const [imageSize, setImageSize] = useState<FloorQualityPreset>('2K');
+  const [refSelectionMode, setRefSelectionMode] = useState<ReferenceSelectionMode>('auto');
+  const [selectedPhotoIndices, setSelectedPhotoIndices] = useState<number[]>([0]);
+
+  // Dynamic Adentro / Afuera parameters
   const [floorParams, setFloorParams] = useState<FloorParametersConfig>(() => ({
     ...DEFAULT_FLOOR_PARAMETERS,
   }));
-  const [modelChoice, setModelChoice] = useState<FloorModelChoice>('gemini-nano-banana-2.1');
-  const [selectedPhotoIndices, setSelectedPhotoIndices] = useState<number[]>([0]);
-  const [useOptimizedSwatch, setUseOptimizedSwatch] = useState<boolean>(true);
-  const [customPrompt, setCustomPrompt] = useState<string>('');
 
+  // Prompt transparency & user presets
+  const [promptStrategy, setPromptStrategy] = useState<PromptStrategyId>('chat_direct');
+  const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [manualPromptText, setManualPromptText] = useState<string>('');
+  const [isPromptManuallyEdited, setIsPromptManuallyEdited] = useState<boolean>(false);
+  const [includeImageRoleLabels, setIncludeImageRoleLabels] = useState<boolean>(true);
+  const [savedPresets, setSavedPresets] = useState<SavedPromptPreset[]>([]);
+
+  // Execution states
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationStep, setGenerationStep] = useState<string>('');
   const [isRefining, setIsRefining] = useState<boolean>(false);
+  const [isUpgrading2K, setIsUpgrading2K] = useState<boolean>(false);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [currentResult, setCurrentResult] = useState<TransformationResult | null>(null);
   const [history, setHistory] = useState<TransformationResult[]>([]);
 
+  // API Key & Workspace partitioning
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
     try {
       return localStorage.getItem('vp_gemini_api_key') || '';
@@ -97,15 +132,20 @@ export default function App() {
       return '';
     }
   });
+  const [serverHasKey, setServerHasKey] = useState<boolean>(false);
+  const [serverApiKeyId, setServerApiKeyId] = useState<string>('default');
+  const [apiKeyId, setApiKeyId] = useState<string>('default');
 
+  // Modals
   const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
   const [isPwaModalOpen, setIsPwaModalOpen] = useState<boolean>(false);
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState<boolean>(false);
+  const [editingFloor, setEditingFloor] = useState<CustomFloorData | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Load history, custom floors, and check URL for API key (?key=... o ?apiKey=...)
+  // Extract ?key=... or ?apiKey=... on initial mount & check backend health
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -129,47 +169,133 @@ export default function App() {
       console.warn('Could not parse key from URL query:', e);
     }
 
-    fetch('/api/floors')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.success && Array.isArray(data.floors) && data.floors.length > 0) {
-          setCustomFloors(data.floors);
-          try {
-            localStorage.setItem('vp_custom_floors', JSON.stringify(data.floors));
-          } catch (e) {}
-          const firstProd = asProductFromCustom(data.floors[0]);
-          setSelectedProduct(firstProd);
-          setSelectedPhotoIndices([0]);
-          setActiveTab('custom');
+    fetch('/api/health')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((health) => {
+        if (health && health.status === 'ok') {
+          setServerHasKey(Boolean(health.hasApiKey));
+          if (typeof health.serverApiKeyId === 'string' && health.serverApiKeyId) {
+            setServerApiKeyId(health.serverApiKeyId);
+          }
         }
       })
       .catch(() => {
-        console.warn('Backend /api/floors not reachable, using localStorage fallback');
+        // Static GitHub Pages mode
       });
-
-    try {
-      const savedHistory = localStorage.getItem('vp_testing_history');
-      if (savedHistory) {
-        const parsed = JSON.parse(savedHistory);
-        if (Array.isArray(parsed)) setHistory(parsed);
-      }
-
-      const savedFloors = localStorage.getItem('vp_custom_floors');
-      if (savedFloors) {
-        const parsed = JSON.parse(savedFloors);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomFloors(parsed);
-          setSelectedProduct(asProductFromCustom(parsed[0]));
-          setSelectedPhotoIndices([0]);
-          setActiveTab('custom');
-        }
-      }
-    } catch (e) {
-      console.warn('Could not load from localStorage', e);
-    }
   }, []);
 
-  // Derive available reference photos for the currently selected product
+  // Derive deterministic apiKeyId whenever client key or server key changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (geminiApiKey.trim()) {
+        const derived = await deriveApiKeyId(geminiApiKey);
+        if (!cancelled) setApiKeyId(derived);
+      } else if (serverApiKeyId && serverApiKeyId !== 'default') {
+        if (!cancelled) setApiKeyId(serverApiKeyId);
+      } else {
+        if (!cancelled) setApiKeyId('default');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [geminiApiKey, serverApiKeyId]);
+
+  // Load partitioned Floors, History & Prompt Presets whenever apiKeyId settles
+  useEffect(() => {
+    const floorsStorageKey = `vp_custom_floors_${apiKeyId}`;
+    const historyStorageKey = `vp_testing_history_${apiKeyId}`;
+    const presetsStorageKey = `vp_prompt_presets_${apiKeyId}`;
+
+    let localFloors: CustomFloorData[] = [];
+    let localHistory: TransformationResult[] = [];
+    let localPresets: SavedPromptPreset[] = [];
+
+    try {
+      // Read partitioned or migrate legacy cache once
+      const rawFloors = localStorage.getItem(floorsStorageKey) || localStorage.getItem('vp_custom_floors');
+      if (rawFloors) {
+        const parsed = JSON.parse(rawFloors);
+        if (Array.isArray(parsed)) localFloors = parsed;
+      }
+
+      const rawHist =
+        localStorage.getItem(historyStorageKey) || localStorage.getItem('vp_testing_history');
+      if (rawHist) {
+        const parsed = JSON.parse(rawHist);
+        if (Array.isArray(parsed)) localHistory = parsed;
+      }
+
+      const rawPresets = localStorage.getItem(presetsStorageKey);
+      if (rawPresets) {
+        const parsed = JSON.parse(rawPresets);
+        if (Array.isArray(parsed)) localPresets = parsed;
+      }
+    } catch (e) {
+      console.warn('Could not read localStorage workspace:', e);
+    }
+
+    setCustomFloors(localFloors);
+    setHistory(localHistory);
+    setSavedPresets(localPresets);
+
+    if (localFloors.length > 0) {
+      const firstProd = asProductFromCustom(localFloors[0]);
+      setSelectedProduct(firstProd);
+      setFloorParams(
+        createInitialFloorParameters({
+          widthCm: firstProd.widthCm || '',
+          plankFormat: firstProd.plankFormat,
+          finish: firstProd.finish,
+          notes: firstProd.notes,
+        })
+      );
+      setSelectedPhotoIndices([0]);
+      setActiveTab('custom');
+    }
+
+    // Sync with backend workspace partitioned by x-api-key-id
+    const headers: HeadersInit = { 'x-api-key-id': apiKeyId };
+
+    fetch('/api/floors', { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.floors)) {
+          const merged = mergeById(data.floors as CustomFloorData[], localFloors);
+          if (merged.length > 0) {
+            setCustomFloors(merged);
+            try {
+              localStorage.setItem(floorsStorageKey, JSON.stringify(merged));
+            } catch {
+              // quota
+            }
+            const firstProd = asProductFromCustom(merged[0]);
+            setSelectedProduct((prev) => (prev?.isCustom ? prev : firstProd));
+            setActiveTab('custom');
+          }
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/history', { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.history)) {
+          const merged = mergeById(data.history as TransformationResult[], localHistory)
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 20);
+          setHistory(merged);
+          try {
+            localStorage.setItem(historyStorageKey, JSON.stringify(merged));
+          } catch {
+            // quota
+          }
+        }
+      })
+      .catch(() => {});
+  }, [apiKeyId]);
+
   const availablePhotos = useMemo(() => {
     if (!selectedProduct) return [];
     if (selectedProduct.isCustom) {
@@ -193,6 +319,26 @@ export default function App() {
     return customFloors.find((f) => f.id === selectedProduct.id) || null;
   }, [selectedProduct, customFloors]);
 
+  // Determine exact 1..4 photo indices to use
+  const effectivePhotoIndices = useMemo(() => {
+    if (availablePhotos.length === 0) return [];
+    if (refSelectionMode === 'auto') {
+      return selectBestReferenceIndices(availablePhotos, 4);
+    }
+    const valid = selectedPhotoIndices.filter((i) => i >= 0 && i < availablePhotos.length);
+    return (valid.length > 0 ? valid : [0]).slice(0, 4);
+  }, [availablePhotos, refSelectionMode, selectedPhotoIndices]);
+
+  const selectedLabelsForPreview = useMemo(() => {
+    if (availablePhotos.length === 0) return [];
+    if (pipelineMode === 'gemini_prepass' && activeCustomFloor) {
+      return ['Muestra limpia IA 5500K'];
+    }
+    return effectivePhotoIndices.map(
+      (i) => availablePhotos[i]?.type || availablePhotos[i]?.name || `Foto ${i + 1}`
+    );
+  }, [availablePhotos, effectivePhotoIndices, pipelineMode, activeCustomFloor]);
+
   const activeParamCount = useMemo(
     () =>
       [
@@ -202,89 +348,127 @@ export default function App() {
         floorParams.tone.enabled,
         floorParams.finish.enabled,
         floorParams.lighting.enabled,
+        floorParams.floorNotes?.enabled,
       ].filter(Boolean).length,
     [floorParams]
   );
 
-  const selectedLabelsForPreview = useMemo(() => {
-    if (availablePhotos.length === 0) return [];
-    if (activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1) {
-      return ['Muestra limpia cenital de tablas'];
-    }
-    const indices = selectedPhotoIndices.filter((i) => i >= 0 && i < availablePhotos.length);
-    const activeIndices = (indices.length > 0 ? indices : [0]).slice(0, 2);
-    return activeIndices.map((i) => availablePhotos[i]?.type || `Foto ${i + 1}`);
-  }, [availablePhotos, selectedPhotoIndices, activeCustomFloor, useOptimizedSwatch]);
-
-  const promptPreview = useMemo(
+  // Automatic live prompt synced with Adentro/Afuera switches
+  const autoPrompt = useMemo(
     () =>
       buildCleanFloorPrompt({
-        productName: selectedProduct?.name || 'Piso seleccionado',
+        productName: selectedProduct?.name || '',
         referenceCount: selectedLabelsForPreview.length || 1,
         referenceLabels: selectedLabelsForPreview,
         params: floorParams,
         customPrompt,
+        strategyId: promptStrategy,
       }),
-    [selectedProduct?.name, selectedLabelsForPreview, floorParams, customPrompt]
+    [selectedProduct?.name, selectedLabelsForPreview, floorParams, customPrompt, promptStrategy]
   );
 
-  const saveToHistory = (newResult: TransformationResult) => {
-    const updated = [newResult, ...history.filter((h) => h.id !== newResult.id).slice(0, 19)];
-    setHistory(updated);
+  const exactPrompt = isPromptManuallyEdited ? manualPromptText : autoPrompt;
+
+  const persistHistoryLocal = (items: TransformationResult[]) => {
     try {
-      localStorage.setItem('vp_testing_history', JSON.stringify(updated));
+      localStorage.setItem(`vp_testing_history_${apiKeyId}`, JSON.stringify(items));
     } catch (e) {
       console.warn('Could not save history to localStorage', e);
     }
   };
 
+  const persistFloorsLocal = (floors: CustomFloorData[]) => {
+    try {
+      localStorage.setItem(`vp_custom_floors_${apiKeyId}`, JSON.stringify(floors));
+    } catch (e) {
+      console.warn('Could not save floors to localStorage', e);
+    }
+  };
+
+  const saveToHistory = (newResult: TransformationResult) => {
+    const tagged: TransformationResult = { ...newResult, apiKeyId };
+    const updated = [tagged, ...history.filter((h) => h.id !== tagged.id)].slice(0, 20);
+    setHistory(updated);
+    persistHistoryLocal(updated);
+
+    fetch('/api/history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key-id': apiKeyId,
+      },
+      body: JSON.stringify(tagged),
+    }).catch(() => {});
+  };
+
   const updateResultInHistory = (updatedResult: TransformationResult) => {
+    const tagged: TransformationResult = { ...updatedResult, apiKeyId };
     setHistory((prev) => {
-      const next = prev.map((item) => (item.id === updatedResult.id ? updatedResult : item));
-      try {
-        localStorage.setItem('vp_testing_history', JSON.stringify(next));
-      } catch (e) {
-        console.warn('Could not update history in localStorage', e);
-      }
+      const next = prev.map((item) => (item.id === tagged.id ? tagged : item));
+      persistHistoryLocal(next);
       return next;
     });
+
+    fetch('/api/history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key-id': apiKeyId,
+      },
+      body: JSON.stringify(tagged),
+    }).catch(() => {});
   };
 
   const handleClearHistory = () => {
     setHistory([]);
     try {
-      localStorage.removeItem('vp_testing_history');
-    } catch (e) {}
+      localStorage.removeItem(`vp_testing_history_${apiKeyId}`);
+    } catch {
+      // ignore
+    }
+    fetch('/api/history', {
+      method: 'DELETE',
+      headers: { 'x-api-key-id': apiKeyId },
+    }).catch(() => {});
   };
 
   const handleRemoveHistoryItem = (id: string) => {
     const updated = history.filter((item) => item.id !== id);
     setHistory(updated);
-    try {
-      localStorage.setItem('vp_testing_history', JSON.stringify(updated));
-    } catch (e) {}
+    persistHistoryLocal(updated);
+
+    fetch(`/api/history/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-api-key-id': apiKeyId },
+    }).catch(() => {});
   };
 
   const handleSaveCustomFloor = (floor: CustomFloorData) => {
-    const updated = [floor, ...customFloors.filter((f) => f.id !== floor.id)];
+    const taggedFloor: CustomFloorData = { ...floor, apiKeyId };
+    const updated = [taggedFloor, ...customFloors.filter((f) => f.id !== taggedFloor.id)];
     setCustomFloors(updated);
-    try {
-      localStorage.setItem('vp_custom_floors', JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Could not save custom floor', e);
-    }
+    persistFloorsLocal(updated);
 
     fetch('/api/floors', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(floor),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key-id': apiKeyId,
+      },
+      body: JSON.stringify(taggedFloor),
     }).catch((err) => console.warn('Could not persist floor to server:', err));
 
-    const asProduct = asProductFromCustom(floor);
+    const asProduct = asProductFromCustom(taggedFloor);
     setSelectedProduct(asProduct);
     setSelectedPhotoIndices([0]);
-    setUseOptimizedSwatch(true);
-    setFloorParams(createInitialFloorParameters(asProduct.widthCm, asProduct.plankFormat));
+    setFloorParams(
+      createInitialFloorParameters({
+        widthCm: asProduct.widthCm || '',
+        plankFormat: asProduct.plankFormat,
+        finish: asProduct.finish,
+        notes: asProduct.notes,
+      })
+    );
     setActiveTab('custom');
     setErrorMessage(null);
   };
@@ -292,11 +476,12 @@ export default function App() {
   const handleRemoveCustomFloor = (id: string) => {
     const updated = customFloors.filter((f) => f.id !== id);
     setCustomFloors(updated);
-    try {
-      localStorage.setItem('vp_custom_floors', JSON.stringify(updated));
-    } catch (e) {}
+    persistFloorsLocal(updated);
 
-    fetch(`/api/floors/${id}`, { method: 'DELETE' }).catch(() => {});
+    fetch(`/api/floors/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-api-key-id': apiKeyId },
+    }).catch(() => {});
 
     if (selectedProduct?.id === id) {
       if (updated.length > 0) {
@@ -315,12 +500,20 @@ export default function App() {
   const handleSelectProduct = (prod: FloorProduct) => {
     setSelectedProduct(prod);
     setSelectedPhotoIndices([0]);
-    setUseOptimizedSwatch(true);
-    // Keep all toggles OFF when switching products, just prefill inactive default width/format hints
     setFloorParams((prev) => ({
       ...prev,
-      widthCm: prev.widthCm.enabled ? prev.widthCm : { enabled: false, value: String(prod.widthCm || 18) },
-      format: prev.format.enabled ? prev.format : { enabled: false, value: prod.plankFormat || 'recto' },
+      widthCm: prev.widthCm.enabled
+        ? prev.widthCm
+        : { enabled: false, value: prod.widthCm ? String(prod.widthCm) : '' },
+      format: prev.format.enabled
+        ? prev.format
+        : { enabled: false, value: prod.plankFormat || 'recto' },
+      finish: prev.finish.enabled
+        ? prev.finish
+        : { enabled: false, value: prod.finish || 'mate' },
+      floorNotes: prev.floorNotes?.enabled
+        ? prev.floorNotes
+        : { enabled: false, value: prod.notes || prod.species || '' },
     }));
     setErrorMessage(null);
   };
@@ -331,15 +524,129 @@ export default function App() {
         if (prev.length === 1) return prev;
         return prev.filter((item) => item !== idx);
       }
-      // Cap at max 2 reference photos per generation to avoid context dilution and payload timeouts
-      const next = prev.length >= 2 ? [...prev.slice(1), idx] : [...prev, idx];
+      // Allow up to 4 manual references cleanly
+      const next = prev.length >= 4 ? [...prev.slice(1), idx] : [...prev, idx];
       return next.sort((a, b) => a - b);
     });
   };
 
   const handleResetAllParams = () => {
-    setFloorParams(createInitialFloorParameters(selectedProduct?.widthCm, selectedProduct?.plankFormat));
+    setFloorParams(
+      createInitialFloorParameters({
+        widthCm: selectedProduct?.widthCm || '',
+        plankFormat: selectedProduct?.plankFormat,
+        finish: selectedProduct?.finish,
+        notes: selectedProduct?.notes || selectedProduct?.species,
+      })
+    );
     setCustomPrompt('');
+  };
+
+  const handleSelectModelAndQuality = (model: FloorModelChoice, size: FloorQualityPreset) => {
+    setModelChoice(model);
+    setImageSize(size);
+  };
+
+  const handleChangePromptStrategy = (strategy: PromptStrategyId) => {
+    setPromptStrategy(strategy);
+    setIsPromptManuallyEdited(false);
+    if (strategy === 'blank') {
+      setManualPromptText('');
+    }
+  };
+
+  const handleSavePreset = (name: string, promptText: string) => {
+    const newPreset: SavedPromptPreset = {
+      id: `preset-${Date.now()}`,
+      name,
+      promptText,
+      strategyId: promptStrategy,
+      createdAt: Date.now(),
+    };
+    const next = [newPreset, ...savedPresets];
+    setSavedPresets(next);
+    try {
+      localStorage.setItem(`vp_prompt_presets_${apiKeyId}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleApplyPreset = (preset: SavedPromptPreset) => {
+    setManualPromptText(preset.promptText);
+    setIsPromptManuallyEdited(true);
+  };
+
+  const handleDeletePreset = (id: string) => {
+    const next = savedPresets.filter((p) => p.id !== id);
+    setSavedPresets(next);
+    try {
+      localStorage.setItem(`vp_prompt_presets_${apiKeyId}`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleExportWorkspace = () => {
+    const payload = {
+      apiKeyId,
+      exportedAt: new Date().toISOString(),
+      customFloors,
+      history,
+      savedPresets,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `visualizador-pisos-respaldo-${apiKeyId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportWorkspace = async (file: File) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (Array.isArray(data.customFloors)) {
+        const mergedFloors = mergeById(data.customFloors, customFloors);
+        setCustomFloors(mergedFloors);
+        persistFloorsLocal(mergedFloors);
+        for (const f of data.customFloors) {
+          fetch('/api/floors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key-id': apiKeyId },
+            body: JSON.stringify({ ...f, apiKeyId }),
+          }).catch(() => {});
+        }
+      }
+      if (Array.isArray(data.history)) {
+        const mergedHist = mergeById(data.history, history)
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 20);
+        setHistory(mergedHist);
+        persistHistoryLocal(mergedHist);
+        for (const h of data.history.slice(0, 10)) {
+          fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key-id': apiKeyId },
+            body: JSON.stringify({ ...h, apiKeyId }),
+          }).catch(() => {});
+        }
+      }
+      if (Array.isArray(data.savedPresets)) {
+        const mergedPresets = mergeById(data.savedPresets, savedPresets);
+        setSavedPresets(mergedPresets);
+        try {
+          localStorage.setItem(`vp_prompt_presets_${apiKeyId}`, JSON.stringify(mergedPresets));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      setErrorMessage('No se pudo importar el archivo .json: verificá que sea un respaldo válido.');
+      console.error(err);
+    }
   };
 
   const getActiveClientKey = (): string => {
@@ -358,15 +665,22 @@ export default function App() {
     }
 
     if (!selectedProduct) {
-      setErrorMessage('Por favor selecciona un piso del catálogo o registra uno en Mis Pisos.');
+      setErrorMessage('Por favor selecciona un piso de referencia.');
       return;
     }
+
+    if (!exactPrompt.trim()) {
+      setErrorMessage('El prompt no puede estar vacío.');
+      return;
+    }
+
+    const activeClientKey = getActiveClientKey();
 
     try {
       setIsGenerating(true);
       setErrorMessage(null);
       setRefineError(null);
-      setGenerationStep('Preparando imagen del ambiente y muestra...');
+      setGenerationStep('Preparando imagen del ambiente y referencias...');
 
       let floorImages: string[] = [];
       let floorImageLabels: string[] = [];
@@ -375,24 +689,31 @@ export default function App() {
       if (selectedProduct.isCustom) {
         const floorObj = customFloors.find((f) => f.id === selectedProduct.id);
         if (floorObj && floorObj.images.length > 0) {
-          const shouldUseSwatch =
-            useOptimizedSwatch && (Boolean(floorObj.cleanSwatchUrl) || floorObj.images.length > 1);
-
-          if (shouldUseSwatch) {
+          if (pipelineMode === 'gemini_prepass') {
             if (floorObj.cleanSwatchUrl) {
               floorImages = [floorObj.cleanSwatchUrl];
-              floorImageLabels = ['Muestra limpia cenital de tablas'];
+              floorImageLabels = ['Muestra limpia IA 5500K'];
             } else {
-              setGenerationStep('Extrayendo muestra limpia del piso (solo esta vez)...');
-              const sourceSubset = floorObj.images.slice(0, 4);
+              setGenerationStep('Paso previo con Gemini: limpiando iluminación y extrayendo muestra...');
+              const bestIndices = selectBestReferenceIndices(floorObj.images, 4);
               const scaledSources = await Promise.all(
-                sourceSubset.map((img) => downscaleDataUrl(img.dataUrl, 1024, 0.85))
+                bestIndices.map((idx) => downscaleDataUrl(floorObj.images[idx].dataUrl, 1024, 0.85))
               );
-              const sourceLabels = sourceSubset.map((img) => img.type || img.name);
+              const sourceLabels = bestIndices.map(
+                (idx) => floorObj.images[idx].type || floorObj.images[idx].name
+              );
 
               let extractedSwatchUrl: string | null = null;
-
-              try {
+              if (activeClientKey) {
+                const directSwatch = await extractCleanFloorSwatchDirect({
+                  apiKey: activeClientKey,
+                  floorImages: scaledSources,
+                  floorImageLabels: sourceLabels,
+                  productName: floorTitle,
+                  modelChoice,
+                });
+                extractedSwatchUrl = directSwatch.swatchUrl;
+              } else {
                 const swatchResp = await fetch('/api/extract-swatch', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -403,67 +724,39 @@ export default function App() {
                     modelChoice,
                   }),
                 });
-                if (swatchResp.ok) {
-                  const contentType = swatchResp.headers.get('content-type') || '';
-                  if (contentType.includes('application/json')) {
-                    const swatchData = await swatchResp.json();
-                    if (swatchData?.success && swatchData?.swatchUrl) {
-                      extractedSwatchUrl = swatchData.swatchUrl;
-                    }
-                  }
+                if (!swatchResp.ok) {
+                  const errBody = await swatchResp.json().catch(() => ({}));
+                  throw new Error(errBody.error || 'No se pudo conectar al servidor para extraer muestra.');
                 }
-              } catch (swatchBackendErr) {
-                console.warn('Backend /api/extract-swatch unreachable, trying direct Gemini API:', swatchBackendErr);
+                const swatchData = await swatchResp.json();
+                extractedSwatchUrl = swatchData.swatchUrl;
               }
 
-              if (!extractedSwatchUrl) {
-                const activeKey = getActiveClientKey();
-                if (!activeKey) {
-                  setIsKeyModalOpen(true);
-                  throw new Error(
-                    'Para generar con Google Nano Banana en GitHub Pages, ingresa tu Gemini API Key tocando "Conectar Clave IA" o comparte el link con ?key=...'
-                  );
-                }
-                const directSwatch = await extractCleanFloorSwatchDirect({
-                  apiKey: activeKey,
-                  floorImages: scaledSources,
-                  floorImageLabels: sourceLabels,
-                  productName: floorTitle,
-                  modelChoice,
-                });
-                extractedSwatchUrl = directSwatch.swatchUrl;
-              }
-
-              const compactSwatch = await downscaleDataUrl(extractedSwatchUrl, 1024, 0.9);
+              const compactSwatch = await downscaleDataUrl(extractedSwatchUrl!, 1024, 0.9);
               const updatedFloor: CustomFloorData = {
                 ...floorObj,
                 cleanSwatchUrl: compactSwatch,
               };
-
               setCustomFloors((prev) => {
                 const next = prev.map((f) => (f.id === floorObj.id ? updatedFloor : f));
-                try {
-                  localStorage.setItem('vp_custom_floors', JSON.stringify(next));
-                } catch (e) {
-                  console.warn('Could not persist cached swatch in localStorage:', e);
-                }
+                persistFloorsLocal(next);
                 return next;
               });
-
               fetch('/api/floors', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-api-key-id': apiKeyId },
                 body: JSON.stringify(updatedFloor),
               }).catch(() => {});
 
               floorImages = [compactSwatch];
-              floorImageLabels = ['Muestra limpia cenital de tablas'];
+              floorImageLabels = ['Muestra limpia IA 5500K'];
             }
           } else {
-            const validIndices = selectedPhotoIndices.filter((i) => i >= 0 && i < floorObj.images.length);
-            const indicesToSend = (validIndices.length > 0 ? validIndices : [0]).slice(0, 2);
+            // Direct chat mode: 1 to 4 selected reference photos
+            const indicesToSend =
+              effectivePhotoIndices.length > 0 ? effectivePhotoIndices.slice(0, 4) : [0];
             floorImages = await Promise.all(
-              indicesToSend.map((i) => downscaleDataUrl(floorObj.images[i].dataUrl, 1024, 0.86))
+              indicesToSend.map((i) => downscaleDataUrl(floorObj.images[i].dataUrl, 1280, 0.86))
             );
             floorImageLabels = indicesToSend.map(
               (i) => `${floorObj.images[i].type || floorObj.images[i].name}`
@@ -479,107 +772,122 @@ export default function App() {
         floorImageLabels = ['Muestra de catálogo'];
       }
 
-      const cleanPromptText = buildCleanFloorPrompt({
-        productName: floorTitle,
-        referenceCount: floorImages.length,
-        referenceLabels: floorImageLabels,
-        params: floorParams,
-        customPrompt: customPrompt.trim(),
-      });
-
+      const finalPromptText = exactPrompt.trim();
+      const qualityLabel =
+        modelChoice === 'gemini-nano-banana-2.1' ? `NB 2.1 (${imageSize})` : 'Flash Lite';
       const refModeSummary =
-        activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1
-          ? 'Muestra limpia IA'
-          : `${floorImages.length} foto${floorImages.length > 1 ? 's' : ''}`;
-
+        pipelineMode === 'gemini_prepass'
+          ? 'Pre-paso Gemini 5500K'
+          : `Directo · ${floorImages.length} ref${floorImages.length > 1 ? 's' : ''}`;
       const floorDetailsSummary =
         activeParamCount === 0
-          ? `Modo natural · ${refModeSummary}`
-          : `${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''} · ${refModeSummary}`;
+          ? `${refModeSummary}`
+          : `${activeParamCount} param · ${refModeSummary}`;
 
-      let generatedResult: { imageUrl: string; model: string; promptUsed?: string } | null = null;
+      setGenerationStep(`Generando con ${qualityLabel}...`);
 
-      // 1. Intentar con el backend del servidor si está disponible
-      try {
-        setGenerationStep(`Generando con ${modelChoice === 'gemini-nano-banana-2.1' ? 'Nano Banana 2.1' : 'Flash Lite'}...`);
-        const response = await fetch('/api/generate-floor', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            roomImage,
-            floorImages,
-            floorImageLabels,
-            productName: floorTitle,
-            promptText: cleanPromptText,
-            customPrompt: customPrompt.trim(),
-            aspectRatio,
-            modelChoice,
-          }),
-        });
+      let generatedResult: {
+        imageUrl: string;
+        model: string;
+        imageSize?: FloorQualityPreset;
+        promptUsed?: string;
+        thoughtSignature?: string;
+        traceEntry?: PromptTraceEntry;
+      };
 
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await response.json();
-            if (data && data.success && data.imageUrl) {
-              generatedResult = data;
-            }
-          }
-        }
-      } catch (backendErr) {
-        console.warn('Backend server not reachable, attempting direct Google Nano Banana API call:', backendErr);
-      }
-
-      // 2. Si no hay backend (ej: en GitHub Pages), llamar directamente a Google Gemini Nano Banana
-      if (!generatedResult) {
-        const activeKey = getActiveClientKey();
-
-        if (!activeKey) {
-          setIsKeyModalOpen(true);
-          throw new Error(
-            'Para generar con Google Nano Banana en GitHub Pages, ingresa tu Gemini API Key tocando "Conectar Clave IA" o comparte el link con ?key=...'
-          );
-        }
-
-        setGenerationStep(`Generando directo con Google ${modelChoice === 'gemini-nano-banana-2.1' ? 'Nano Banana 2.1' : 'Flash Lite'}...`);
+      if (activeClientKey) {
         generatedResult = await generateWithGoogleNanoBanana({
-          apiKey: activeKey,
+          apiKey: activeClientKey,
           roomImage,
           floorImages,
           floorImageLabels,
           productName: floorTitle,
-          parameters: floorParams,
-          customPrompt: customPrompt.trim(),
+          promptText: finalPromptText,
+          includeImageRoleLabels,
           aspectRatio,
           modelChoice,
+          imageSize,
+          pipelineMode,
         });
+      } else {
+        let respOk = false;
+        let serverData: any = null;
+        try {
+          const response = await fetch('/api/generate-floor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              roomImage,
+              floorImages,
+              floorImageLabels,
+              productName: floorTitle,
+              promptText: finalPromptText,
+              customPrompt: customPrompt.trim(),
+              includeImageRoleLabels,
+              aspectRatio,
+              modelChoice,
+              imageSize,
+              pipelineMode,
+            }),
+          });
+          if (response.ok && (response.headers.get('content-type') || '').includes('application/json')) {
+            serverData = await response.json();
+            respOk = Boolean(serverData?.success && serverData?.imageUrl);
+          } else {
+            const errJson = await response.json().catch(() => null);
+            if (errJson?.error) {
+              throw new Error(errJson.error);
+            }
+          }
+        } catch (backendErr: any) {
+          if (backendErr?.message && !String(backendErr.message).includes('Failed to fetch')) {
+            throw backendErr;
+          }
+        }
+
+        if (!respOk || !serverData) {
+          setIsKeyModalOpen(true);
+          throw new Error(
+            'Conectá tu Gemini API Key tocando "Conectar Clave IA" o compartiendo el enlace con ?key=...'
+          );
+        }
+        generatedResult = serverData;
       }
 
       setGenerationStep('Preparando visor y chat de correcciones...');
       const modelUsed = generatedResult.model || modelChoice;
+      const resolvedSize: FloorQualityPreset | undefined =
+        generatedResult.imageSize || (modelUsed === 'gemini-nano-banana-2.1' ? imageSize : undefined);
+
       const initialAssistantMessage: ChatRefinementMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
-        text: `Listo, así quedó "${floorTitle}". ¿Así está bien o querés cambiar algo? Podés pedir cambios de dirección, ancho de tabla, tono o brillo directo por acá.`,
+        text: `Listo, así quedó "${floorTitle}". ¿Así está bien o querés cambiar algo? Podés pedir cambios directo por acá.`,
         imageUrl: generatedResult.imageUrl,
         modelUsed,
+        imageSize: resolvedSize,
         versionNumber: 1,
+        thoughtSignature: generatedResult.thoughtSignature,
+        traceEntry: generatedResult.traceEntry,
         timestamp: Date.now(),
       };
 
       const newResult: TransformationResult = {
         id: `res-${Date.now()}`,
         timestamp: Date.now(),
+        apiKeyId,
         roomImageUrl: roomImage,
         resultImageUrl: generatedResult.imageUrl,
         floorTitle,
         floorDetails: floorDetailsSummary,
         referenceImages: floorImages,
+        referenceLabelsUsed: floorImageLabels,
         modelUsed,
-        promptUsed: generatedResult.promptUsed || cleanPromptText,
+        imageSize: resolvedSize,
+        pipelineMode,
+        promptUsed: generatedResult.promptUsed || finalPromptText,
         aspectRatio,
+        initialTraceEntry: generatedResult.traceEntry,
         messages: [initialAssistantMessage],
       };
 
@@ -601,13 +909,14 @@ export default function App() {
     baseImageUrl,
     instruction,
     includeReference,
+    rawMode,
   }: {
     baseImageUrl: string;
     instruction: string;
     includeReference: boolean;
+    rawMode: boolean;
   }) => {
     if (!currentResult) return;
-
     const cleanInstruction = instruction.trim();
     if (!cleanInstruction) return;
 
@@ -621,10 +930,33 @@ export default function App() {
               text: `Versión inicial de "${currentResult.floorTitle}".`,
               imageUrl: currentResult.resultImageUrl,
               modelUsed: currentResult.modelUsed,
+              imageSize: currentResult.imageSize,
               versionNumber: 1,
+              traceEntry: currentResult.initialTraceEntry,
               timestamp: currentResult.timestamp,
             },
           ];
+
+    // Build real multi-turn conversation history BEFORE pushing the current user turn
+    const conversationHistory: MultiTurnHistoryTurn[] = [];
+    let skippedInitialAssistant = false;
+    for (const m of existingMessages) {
+      if (!skippedInitialAssistant && m.role === 'assistant' && m.imageUrl) {
+        skippedInitialAssistant = true;
+        conversationHistory.push({
+          role: 'model',
+          imageUrl: m.imageUrl,
+          thoughtSignature: m.thoughtSignature,
+        });
+        continue;
+      }
+      conversationHistory.push({
+        role: m.role === 'user' ? 'user' : 'model',
+        text: m.role === 'user' ? m.text : undefined,
+        imageUrl: m.role === 'assistant' ? m.imageUrl : undefined,
+        thoughtSignature: m.role === 'assistant' ? m.thoughtSignature : undefined,
+      });
+    }
 
     const userMsg: ChatRefinementMessage = {
       id: `msg-u-${Date.now()}`,
@@ -648,72 +980,87 @@ export default function App() {
     setIsRefining(true);
     setRefineError(null);
 
-    const referenceImageUrl =
+    const refsToSend =
       includeReference && currentResult.referenceImages?.length
-        ? currentResult.referenceImages[0]
-        : undefined;
+        ? currentResult.referenceImages.slice(0, 4)
+        : [];
+    const refLabelsToSend = currentResult.referenceLabelsUsed || [];
+    const activeClientKey = getActiveClientKey();
 
     try {
-      let refined: { imageUrl: string; model: string; assistantText?: string; promptUsed?: string } | null =
-        null;
+      let refined: {
+        imageUrl: string;
+        model: string;
+        imageSize?: FloorQualityPreset;
+        assistantText?: string;
+        promptUsed?: string;
+        thoughtSignature?: string;
+        traceEntry?: PromptTraceEntry;
+      };
 
-      // 1. Try server endpoint
-      try {
+      if (activeClientKey) {
+        refined = await refineWithGoogleNanoBanana({
+          apiKey: activeClientKey,
+          baseImageUrl,
+          originalRoomImage: currentResult.roomImageUrl,
+          referenceImages: refsToSend,
+          referenceLabels: refLabelsToSend,
+          initialPromptText: currentResult.promptUsed,
+          conversationHistory,
+          instruction: cleanInstruction,
+          previousInstructions,
+          rawMode,
+          includeImageRoleLabels,
+          aspectRatio: currentResult.aspectRatio || aspectRatio,
+          modelChoice,
+          imageSize,
+        });
+      } else {
         const resp = await fetch('/api/refine-floor', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             baseImageUrl,
-            referenceImageUrl,
+            originalRoomImage: currentResult.roomImageUrl,
+            referenceImages: refsToSend,
+            referenceLabels: refLabelsToSend,
+            initialPromptText: currentResult.promptUsed,
+            conversationHistory,
             instruction: cleanInstruction,
             previousInstructions,
+            rawMode,
+            includeImageRoleLabels,
             aspectRatio: currentResult.aspectRatio || aspectRatio,
             modelChoice,
+            imageSize,
           }),
         });
 
-        if (resp.ok) {
-          const contentType = resp.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await resp.json();
-            if (data && data.success && data.imageUrl) {
-              refined = data;
-            }
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          if (!errData?.error) {
+            setIsKeyModalOpen(true);
+            throw new Error('Conectá tu clave de Gemini API para aplicar correcciones.');
           }
+          throw new Error(errData.error);
         }
-      } catch (backendErr) {
-        console.warn('Backend /api/refine-floor unreachable, calling Google Gemini directly:', backendErr);
-      }
-
-      // 2. Fallback to direct Google Nano Banana API (GitHub Pages)
-      if (!refined) {
-        const activeKey = getActiveClientKey();
-        if (!activeKey) {
-          setIsKeyModalOpen(true);
-          throw new Error(
-            'Necesitas tu clave de Gemini API para aplicar correcciones desde GitHub Pages.'
-          );
-        }
-
-        refined = await refineWithGoogleNanoBanana({
-          apiKey: activeKey,
-          baseImageUrl,
-          referenceImageUrl,
-          instruction: cleanInstruction,
-          previousInstructions,
-          aspectRatio: currentResult.aspectRatio || aspectRatio,
-          modelChoice,
-        });
+        refined = await resp.json();
       }
 
       const modelUsed = refined.model || modelChoice;
+      const resolvedSize: FloorQualityPreset | undefined =
+        refined.imageSize || (modelUsed === 'gemini-nano-banana-2.1' ? imageSize : undefined);
+
       const assistantMsg: ChatRefinementMessage = {
         id: `msg-a-${Date.now()}`,
         role: 'assistant',
         text: refined.assistantText || `Corrección aplicada: "${cleanInstruction}".`,
         imageUrl: refined.imageUrl,
         modelUsed,
+        imageSize: resolvedSize,
         versionNumber: nextVersionNumber,
+        thoughtSignature: refined.thoughtSignature,
+        traceEntry: refined.traceEntry,
         timestamp: Date.now(),
       };
 
@@ -721,6 +1068,7 @@ export default function App() {
         ...optimisticResult,
         resultImageUrl: refined.imageUrl,
         modelUsed,
+        imageSize: resolvedSize,
         messages: [...(optimisticResult.messages || []), assistantMsg],
       };
 
@@ -734,13 +1082,113 @@ export default function App() {
     }
   };
 
-  const handleSelectVersion = (imageUrl: string, modelUsed: string) => {
+  const handleUpgradeTo2K = async () => {
+    if (!currentResult || isUpgrading2K || isRefining) return;
+    setIsUpgrading2K(true);
+    setRefineError(null);
+
+    const existingMessages: ChatRefinementMessage[] =
+      currentResult.messages && currentResult.messages.length > 0
+        ? currentResult.messages
+        : [
+            {
+              id: `msg-init-${currentResult.id}`,
+              role: 'assistant',
+              text: `Versión inicial de "${currentResult.floorTitle}".`,
+              imageUrl: currentResult.resultImageUrl,
+              modelUsed: currentResult.modelUsed,
+              imageSize: currentResult.imageSize,
+              versionNumber: 1,
+              traceEntry: currentResult.initialTraceEntry,
+              timestamp: currentResult.timestamp,
+            },
+          ];
+
+    const nextVersionNumber =
+      existingMessages.filter((m) => m.role === 'assistant' && m.imageUrl).length + 1;
+    const activeClientKey = getActiveClientKey();
+
+    try {
+      let upgraded: {
+        imageUrl: string;
+        model: string;
+        imageSize: FloorQualityPreset;
+        promptUsed: string;
+        thoughtSignature?: string;
+        traceEntry: PromptTraceEntry;
+      };
+
+      if (activeClientKey) {
+        upgraded = await upgradeTo2KWithGoogleNanoBanana({
+          apiKey: activeClientKey,
+          currentResultImageUrl: currentResult.resultImageUrl,
+          originalRoomImageUrl: currentResult.roomImageUrl,
+          referenceImages: currentResult.referenceImages,
+          referenceLabels: currentResult.referenceLabelsUsed,
+          aspectRatio: currentResult.aspectRatio || aspectRatio,
+        });
+      } else {
+        const resp = await fetch('/api/upgrade-2k', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            currentResultImageUrl: currentResult.resultImageUrl,
+            originalRoomImageUrl: currentResult.roomImageUrl,
+            referenceImages: currentResult.referenceImages,
+            referenceLabels: currentResult.referenceLabelsUsed,
+            aspectRatio: currentResult.aspectRatio || aspectRatio,
+          }),
+        });
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData?.error || 'No se pudo escalar a 2K.');
+        }
+        upgraded = await resp.json();
+      }
+
+      const upgradeMsg: ChatRefinementMessage = {
+        id: `msg-2k-${Date.now()}`,
+        role: 'assistant',
+        text: 'Versión escalada en alta definición 2K con Nano Banana 2.1.',
+        imageUrl: upgraded.imageUrl,
+        modelUsed: 'gemini-nano-banana-2.1',
+        imageSize: '2K',
+        versionNumber: nextVersionNumber,
+        thoughtSignature: upgraded.thoughtSignature,
+        traceEntry: upgraded.traceEntry,
+        timestamp: Date.now(),
+      };
+
+      const finalizedResult: TransformationResult = {
+        ...currentResult,
+        resultImageUrl: upgraded.imageUrl,
+        modelUsed: 'gemini-nano-banana-2.1',
+        imageSize: '2K',
+        messages: [...existingMessages, upgradeMsg],
+      };
+
+      setCurrentResult(finalizedResult);
+      updateResultInHistory(finalizedResult);
+    } catch (err: any) {
+      console.error('Error upgrading to 2K:', err);
+      setRefineError(sanitizeError(err));
+    } finally {
+      setIsUpgrading2K(false);
+    }
+  };
+
+  const handleSelectVersion = (
+    imageUrl: string,
+    selectedModelUsed: string,
+    selectedSize?: FloorQualityPreset
+  ) => {
     if (!currentResult) return;
     setRefineError(null);
     setCurrentResult({
       ...currentResult,
       resultImageUrl: imageUrl,
-      modelUsed,
+      modelUsed: selectedModelUsed,
+      imageSize: selectedSize,
     });
   };
 
@@ -766,7 +1214,7 @@ export default function App() {
         onOpenPwaModal={() => setIsPwaModalOpen(true)}
         onReset={handleResetAll}
         historyCount={history.length}
-        hasApiKey={!!geminiApiKey}
+        hasApiKey={Boolean(geminiApiKey.trim() || serverHasKey)}
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6">
@@ -774,10 +1222,13 @@ export default function App() {
           <ComparisonViewer
             result={currentResult}
             modelChoice={modelChoice}
-            onChangeModelChoice={setModelChoice}
+            imageSize={imageSize}
+            onSelectModelAndQuality={handleSelectModelAndQuality}
             onRefineResult={handleRefineResult}
+            onUpgradeTo2K={handleUpgradeTo2K}
             onSelectVersion={handleSelectVersion}
             isRefining={isRefining}
+            isUpgrading2K={isUpgrading2K}
             refineError={refineError}
             onTryAnotherFloor={handleTryAnotherFloor}
             onResetAll={handleResetAll}
@@ -788,15 +1239,17 @@ export default function App() {
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-stone-800/80 pb-5">
               <div className="flex flex-col gap-1.5 max-w-2xl">
                 <div className="flex items-center gap-2 text-xs font-medium text-stone-400">
-                  <span className="text-amber-500 font-semibold">Visualizador Arquitectónico</span>
-                  <span aria-hidden="true" className="text-stone-600">·</span>
-                  <span>Parámetros Opcionales + Chat de Corrección</span>
+                  <span className="text-amber-500 font-semibold">Estudio Directo Nano Banana</span>
+                  <span aria-hidden="true" className="text-stone-600">
+                    ·
+                  </span>
+                  <span>Control Total de Prompt + 1 a 4 Referencias</span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-100">
                   Visualiza el piso de madera en tu propio espacio
                 </h1>
                 <p className="text-xs sm:text-sm text-stone-400 leading-relaxed max-w-xl">
-                  Subí la foto del ambiente, elegí el piso (sin restricciones forzadas por defecto) y luego corregí cualquier detalle por chat directo sobre el resultado.
+                  Subí la foto del ambiente, elegí el piso con 1 a 4 fotos de referencia, decidí en vivo qué entra y qué sale del prompt y corregí por chat directo sobre la imagen.
                 </p>
               </div>
 
@@ -818,7 +1271,7 @@ export default function App() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                   <div className="flex-1 leading-relaxed">
-                    <p className="font-semibold text-red-100">Aviso de Cuota / Transformación</p>
+                    <p className="font-semibold text-red-100">Aviso de Transformación / API</p>
                     <p className="text-red-300 mt-0.5">{errorMessage}</p>
                   </div>
                 </div>
@@ -848,33 +1301,60 @@ export default function App() {
               />
             </section>
 
-            {/* Step 2: Floor Selection + Toggleable Parameters */}
+            {/* Step 2: Floor Selection + Dynamic Adentro/Afuera + Live Editable Prompt Console */}
             <section className="space-y-6 pt-2 border-t border-stone-800/80">
               <FloorSelectorStep
                 selectedProduct={selectedProduct}
                 onSelectProduct={handleSelectProduct}
                 customFloors={customFloors}
-                onOpenAddFloorModal={() => setIsAddFloorModalOpen(true)}
+                onOpenAddFloorModal={() => {
+                  setEditingFloor(null);
+                  setIsAddFloorModalOpen(true);
+                }}
+                onEditCustomFloor={(floor) => {
+                  setEditingFloor(floor);
+                  setIsAddFloorModalOpen(true);
+                }}
                 onRemoveCustomFloor={handleRemoveCustomFloor}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
+                onExportWorkspace={handleExportWorkspace}
+                onImportWorkspace={handleImportWorkspace}
               />
 
               <ParameterTogglePanel
                 params={floorParams}
                 onChangeParams={setFloorParams}
                 onResetAllParams={handleResetAllParams}
+                pipelineMode={pipelineMode}
+                onChangePipelineMode={setPipelineMode}
                 modelChoice={modelChoice}
-                onChangeModelChoice={setModelChoice}
+                imageSize={imageSize}
+                onSelectModelAndQuality={handleSelectModelAndQuality}
                 availablePhotos={availablePhotos}
+                refSelectionMode={refSelectionMode}
+                onChangeRefSelectionMode={setRefSelectionMode}
                 selectedPhotoIndices={selectedPhotoIndices}
+                effectivePhotoIndices={effectivePhotoIndices}
                 onTogglePhotoIndex={handleTogglePhotoIndex}
-                hasCleanSwatch={!!activeCustomFloor?.cleanSwatchUrl}
-                useOptimizedSwatch={useOptimizedSwatch}
-                onToggleOptimizedSwatch={setUseOptimizedSwatch}
-                promptPreview={promptPreview}
+                hasCleanSwatch={Boolean(activeCustomFloor?.cleanSwatchUrl)}
+                promptStrategy={promptStrategy}
+                onChangePromptStrategy={handleChangePromptStrategy}
                 customPrompt={customPrompt}
                 onChangeCustomPrompt={setCustomPrompt}
+                exactPrompt={exactPrompt}
+                isPromptManuallyEdited={isPromptManuallyEdited}
+                onEditExactPrompt={(val) => {
+                  setManualPromptText(val);
+                  setIsPromptManuallyEdited(true);
+                }}
+                onResetManualPrompt={() => setIsPromptManuallyEdited(false)}
+                includeImageRoleLabels={includeImageRoleLabels}
+                onToggleImageRoleLabels={setIncludeImageRoleLabels}
+                savedPresets={savedPresets}
+                onSavePreset={handleSavePreset}
+                onApplyPreset={handleApplyPreset}
+                onDeletePreset={handleDeletePreset}
               />
             </section>
 
@@ -887,19 +1367,23 @@ export default function App() {
                   </div>
                   <div className="text-[11px] text-stone-400 tabular-nums mt-0.5">
                     {!roomImage ? 'Falta foto del ambiente' : 'Ambiente listo'} ·{' '}
-                    {activeParamCount === 0
-                      ? 'Sin parámetros forzados'
-                      : `${activeParamCount} parámetro${activeParamCount > 1 ? 's' : ''} activo${activeParamCount > 1 ? 's' : ''}`}{' '}
+                    {modelChoice === 'gemini-nano-banana-2.1'
+                      ? `NB 2.1 (${imageSize})`
+                      : 'Flash Lite'}{' '}
                     ·{' '}
-                    {activeCustomFloor && useOptimizedSwatch && availablePhotos.length > 1
-                      ? 'Muestra limpia IA'
-                      : `${Math.min(selectedPhotoIndices.length, 2)} foto${selectedPhotoIndices.length > 1 ? 's' : ''} muestra`}
+                    {pipelineMode === 'gemini_prepass'
+                      ? 'Pre-paso Gemini'
+                      : `Directo (${effectivePhotoIndices.length} ref${effectivePhotoIndices.length > 1 ? 's' : ''})`}{' '}
+                    ·{' '}
+                    {isPromptManuallyEdited
+                      ? 'Prompt editado'
+                      : `${activeParamCount} adentro`}
                   </div>
                 </div>
 
                 <button
                   type="button"
-                  disabled={!roomImage || isGenerating || !selectedProduct}
+                  disabled={!roomImage || isGenerating || !selectedProduct || !exactPrompt.trim()}
                   onClick={handleTransformFloor}
                   className="w-full sm:w-auto min-h-[48px] px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-950/60 transition-all cursor-pointer shrink-0"
                 >
@@ -922,10 +1406,14 @@ export default function App() {
         )}
       </main>
 
-      {/* Add Floor Technical Data Modal */}
+      {/* Add / Edit Floor Technical Data Modal */}
       <AddFloorModal
         isOpen={isAddFloorModalOpen}
-        onClose={() => setIsAddFloorModalOpen(false)}
+        editingFloor={editingFloor}
+        onClose={() => {
+          setIsAddFloorModalOpen(false);
+          setEditingFloor(null);
+        }}
         onSaveFloor={handleSaveCustomFloor}
       />
 
@@ -949,6 +1437,7 @@ export default function App() {
         isOpen={isHistoryModalOpen}
         onClose={() => setIsHistoryModalOpen(false)}
         history={history}
+        apiKeyId={apiKeyId}
         onSelectResult={(result) => {
           const hydrated: TransformationResult = {
             ...result,
@@ -962,7 +1451,9 @@ export default function App() {
                       text: `Resultado guardado para "${result.floorTitle}". Podés pedir correcciones directo desde acá.`,
                       imageUrl: result.resultImageUrl,
                       modelUsed: result.modelUsed,
+                      imageSize: result.imageSize,
                       versionNumber: 1,
+                      traceEntry: result.initialTraceEntry,
                       timestamp: result.timestamp,
                     },
                   ],
@@ -970,21 +1461,21 @@ export default function App() {
           setCurrentResult(hydrated);
           setRefineError(null);
         }}
+        onReusePrompt={(promptText) => {
+          setManualPromptText(promptText);
+          setIsPromptManuallyEdited(true);
+          setCurrentResult(null);
+          setErrorMessage(null);
+        }}
         onClearHistory={handleClearHistory}
         onRemoveItem={handleRemoveHistoryItem}
       />
 
       {/* Mobile QR Modal */}
-      <MobileQrModal
-        isOpen={isQrModalOpen}
-        onClose={() => setIsQrModalOpen(false)}
-      />
+      <MobileQrModal isOpen={isQrModalOpen} onClose={() => setIsQrModalOpen(false)} />
 
       {/* iPhone PWA Install Modal */}
-      <InstallPwaModal
-        isOpen={isPwaModalOpen}
-        onClose={() => setIsPwaModalOpen(false)}
-      />
+      <InstallPwaModal isOpen={isPwaModalOpen} onClose={() => setIsPwaModalOpen(false)} />
     </div>
   );
 }
